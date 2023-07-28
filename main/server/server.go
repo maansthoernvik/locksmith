@@ -5,8 +5,8 @@ import (
 	"io"
 	"net"
 
-	"github.com/maansthoernvik/locksmith/lib/env"
-	"github.com/maansthoernvik/locksmith/lib/log"
+	"github.com/maansthoernvik/locksmith/env"
+	"github.com/maansthoernvik/locksmith/log"
 	"go.uber.org/zap"
 )
 

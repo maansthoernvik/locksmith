@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/maansthoernvik/locksmith/lib/connection"
-	"github.com/maansthoernvik/locksmith/lib/env"
+	"github.com/maansthoernvik/locksmith/connection"
+	"github.com/maansthoernvik/locksmith/env"
 )
 
 const ENV_HOST = "LS_HOST"

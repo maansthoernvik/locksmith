@@ -1,5 +1,9 @@
 name: image
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 on:
   workflow_dispatch:
   push:
@@ -10,6 +14,10 @@ on:
 
 jobs:
   docker:
+    permissions:
+      contents: read
+      packages: write
+
     runs-on: ubuntu-latest
     steps:
       - uses: docker/setup-qemu-action@v3
@@ -19,11 +27,11 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: maansthoernvik/locksmith
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 

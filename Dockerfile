@@ -4,9 +4,11 @@ FROM golang:1.21
 # Set destination for COPY
 RUN pwd
 RUN ls -al
-RUN ls -al /locksmith
 
 WORKDIR /locksmith
+
+RUN ls -al /locksmith
+
 
 COPY *.go ./
 

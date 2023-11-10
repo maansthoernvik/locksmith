@@ -9,7 +9,7 @@ WORKDIR /locksmith
 
 RUN ls -al /locksmith
 
-
+COPY go.mod ./
 COPY *.go ./
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /locksmith

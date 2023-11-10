@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.21
+FROM golang:1.21 AS build
 
 # Set destination for COPY
 RUN pwd

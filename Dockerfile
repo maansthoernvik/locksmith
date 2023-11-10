@@ -9,16 +9,18 @@ WORKDIR /locksmith
 
 RUN ls -al
 
-COPY server ./
-COPY go.mod ./
+COPY . ./
+
+RUN ls -al
+#RUN go mod download
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /locksmith
 
-RUN ls -al
+FROM alpine:latest
 
-# Download Go modules
-#COPY go.mod go.sum ./
-#RUN go mod download
+WORKDIR /
+
+COPY --from=build /locksmith .
 
 # Run
 CMD ["/locksmith"]

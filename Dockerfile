@@ -2,7 +2,9 @@
 FROM golang:1.21
 
 # Set destination for COPY
-RUN mkdir locksmith
+RUN ls -al && pwd
+
+WORKDIR /locksmith
 RUN CGO_ENABLED=0 GOOS=linux go build -o /locksmith
 
 # Download Go modules

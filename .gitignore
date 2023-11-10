@@ -7,8 +7,7 @@
 *.dll
 *.so
 *.dylib
-client
-server
+locksmith
 
 # Test binary, built with `go test -c`
 *.test

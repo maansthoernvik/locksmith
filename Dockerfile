@@ -7,12 +7,14 @@ RUN ls -al
 
 WORKDIR /locksmith
 
-RUN ls -al /locksmith
+RUN ls -al
 
+COPY server ./
 COPY go.mod ./
-COPY *.go ./
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /locksmith
+
+RUN ls -al
 
 # Download Go modules
 #COPY go.mod go.sum ./

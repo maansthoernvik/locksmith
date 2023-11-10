@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/maansthoernvik/locksmith/connection"
+	"github.com/maansthoernvik/locksmith/server/connection"
 )
 
 func main() {

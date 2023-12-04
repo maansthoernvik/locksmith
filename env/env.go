@@ -9,11 +9,10 @@ import (
 )
 
 type ErrorNotFound struct {
-	error
 	name string
 }
 
-func newErrorNotFound(name string) *ErrorNotFound {
+func newErrorNotFound(name string) error {
 	return &ErrorNotFound{name: name}
 }
 

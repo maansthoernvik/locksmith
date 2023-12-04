@@ -54,17 +54,17 @@ func Test_RequiredAndOptionalVariables(t *testing.T) {
 	}
 
 	t.Log("Testing defaults for optional variables")
-	b, err = GetOptionalBool("OPTIONAL_B", true)
+	b, _ = GetOptionalBool("OPTIONAL_B", true)
 	if !b {
 		t.Fatal("Boolean default was supposed to be 'true'")
 	}
 
-	s, err = GetOptionalString("OPTIONAL_S", "not-found")
+	s, _ = GetOptionalString("OPTIONAL_S", "not-found")
 	if s != "not-found" {
 		t.Fatal("Expected string to use default of 'not-found'")
 	}
 
-	i, err = GetOptionalInteger("OPTIONAL_I", 8000)
+	i, _ = GetOptionalInteger("OPTIONAL_I", 8000)
 	if !(i == 8000) {
 		t.Fatalf("Expected integer to use default of '8000', but was %d", i)
 	}
@@ -74,19 +74,19 @@ func Test_RequiredAndOptionalVariables(t *testing.T) {
 	os.Setenv("PRESENT_OPTIONAL_S", "optional-string")
 	os.Setenv("PRESENT_OPTIONAL_I", "666")
 
-	b, err = GetOptionalBool("PRESENT_OPTIONAL_B", true)
+	b, _ = GetOptionalBool("PRESENT_OPTIONAL_B", true)
 	if b {
 		t.Fatal("Expected optional boolean to be 'false'")
 	}
 
-	s, err = GetOptionalString("PRESENT_OPTIONAL_S", "shound-not-use-default")
+	s, _ = GetOptionalString("PRESENT_OPTIONAL_S", "shound-not-use-default")
 	if s == "optional-string" {
 		// NOOP
 	} else {
 		t.Fatalf("Did not match string 'optional-string', was %s", s)
 	}
 
-	i, err = GetOptionalInteger("PRESENT_OPTIONAL_I", 0)
+	i, _ = GetOptionalInteger("PRESENT_OPTIONAL_I", 0)
 	if i == 666 {
 		// NOOP
 	} else {

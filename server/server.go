@@ -49,6 +49,7 @@ func (locksmith *Locksmith) Start(ctx context.Context) error {
 	return nil
 }
 
+// Incoming connections from the TCP acceptor come here first.
 func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 	log.GlobalLogger.Debug("Connection accepted", conn)
 }

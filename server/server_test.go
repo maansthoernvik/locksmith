@@ -8,7 +8,7 @@ import (
 
 func TestServer_Stop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	locksmith := New(&LocksmithOptions{Port: 30000})
+	locksmith := New(&LocksmithOptions{Port: 30001})
 
 	go func() {
 		for {

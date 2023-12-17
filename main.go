@@ -12,19 +12,14 @@ func main() {
 	switch logLevel {
 	case "DEBUG":
 		log.GlobalLogger = log.New(log.DEBUG)
-		break
 	case "INFO":
 		log.GlobalLogger = log.New(log.INFO)
-		break
 	case "WARNING":
 		log.GlobalLogger = log.New(log.WARNING)
-		break
 	case "ERROR":
 		log.GlobalLogger = log.New(log.ERROR)
-		break
 	case "FATAL":
 		log.GlobalLogger = log.New(log.FATAL)
-		break
 	default:
 		break
 	}

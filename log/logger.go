@@ -78,6 +78,6 @@ func (logger *Logger) Fatal(args ...any) {
 	logger.fatal.Fatalln(args...)
 }
 
-func setLogLevel(logLevel LogLevel) {
-	GlobalLogger.logLevel = logLevel
-}
+// func setLogLevel(logLevel LogLevel) {
+// 	GlobalLogger.logLevel = logLevel
+// }

@@ -3,7 +3,11 @@ package connection
 import (
 	"fmt"
 	"net"
+
+	"github.com/maansthoernvik/locksmith/log"
 )
+
+var logger = log.GlobalLogger
 
 type TCPAcceptor interface {
 	Start(port uint16) error
@@ -11,10 +15,11 @@ type TCPAcceptor interface {
 
 type TCPAcceptorImpl struct {
 	listener net.Listener
+	handler  func(net.Conn)
 }
 
-func NewTCPAcceptor() TCPAcceptor {
-	return &TCPAcceptorImpl{}
+func NewTCPAcceptor(handler func(conn net.Conn)) TCPAcceptor {
+	return &TCPAcceptorImpl{handler: handler}
 }
 
 func (tcpAcceptor *TCPAcceptorImpl) Start(port uint16) error {
@@ -33,12 +38,9 @@ func (tcpAcceptor *TCPAcceptorImpl) startListener() {
 	for {
 		conn, err := tcpAcceptor.listener.Accept()
 		if err != nil {
-			// TODO
+			logger.Error(err)
+		} else {
+			go tcpAcceptor.handler(conn)
 		}
-		go tcpAcceptor.handleConnection(conn)
 	}
-}
-
-func (tcpAcceptor *TCPAcceptorImpl) handleConnection(conn net.Conn) {
-
 }

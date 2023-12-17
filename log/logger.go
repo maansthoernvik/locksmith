@@ -51,30 +51,35 @@ func New(logLevel LogLevel) *Logger {
 }
 
 func (logger *Logger) Debug(args ...any) {
+	// log.Println("Called DEBUG")
 	if logger.logLevel == DEBUG {
 		logger.debug.Println(args...)
 	}
 }
 
 func (logger *Logger) Info(args ...any) {
+	// log.Println("Called INFO")
 	if logger.logLevel <= INFO {
 		logger.info.Println(args...)
 	}
 }
 
 func (logger *Logger) Warning(args ...any) {
+	// log.Println("Called WARNING")
 	if logger.logLevel <= WARNING {
 		logger.warning.Println(args...)
 	}
 }
 
 func (logger *Logger) Error(args ...any) {
+	// log.Println("Called ERROR")
 	if logger.logLevel <= ERROR {
 		logger.err.Println(args...)
 	}
 }
 
 func (logger *Logger) Fatal(args ...any) {
+	// log.Println("Called FATAL")
 	logger.fatal.Fatalln(args...)
 }
 

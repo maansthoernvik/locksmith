@@ -7,6 +7,10 @@ import (
 
 type LogLevel uint8
 
+// Global logger used for direct calls to Debug, Info, Warning, Error, and Fatal.
+// Defaults to the WARNING log level, call setLogLevel to overwrite.
+var GlobalLogger *Logger = New(WARNING)
+
 const (
 	DEBUG   LogLevel = 0
 	INFO    LogLevel = 1
@@ -72,4 +76,8 @@ func (logger *Logger) Error(args ...any) {
 
 func (logger *Logger) Fatal(args ...any) {
 	logger.fatal.Fatalln(args...)
+}
+
+func setLogLevel(logLevel LogLevel) {
+	GlobalLogger.logLevel = logLevel
 }

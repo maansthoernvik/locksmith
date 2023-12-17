@@ -1,15 +1,35 @@
 package main
 
 import (
+	"github.com/maansthoernvik/locksmith/env"
 	"github.com/maansthoernvik/locksmith/log"
+	"github.com/maansthoernvik/locksmith/server"
 )
 
 func main() {
-	logger := log.New(log.DEBUG)
+	logLevel, _ := env.GetRequiredString("LOCKSMITH_LOG_LEVEL")
 
-	logger.Debug("this wont show")
-	logger.Info("this INFO shows")
-	logger.Warning("this warning shows")
-	logger.Error("this error shows")
-	logger.Fatal("this fatal error causes a crash")
+	switch logLevel {
+	case "DEBUG":
+		log.GlobalLogger = log.New(log.DEBUG)
+		break
+	case "INFO":
+		log.GlobalLogger = log.New(log.INFO)
+		break
+	case "WARNING":
+		log.GlobalLogger = log.New(log.WARNING)
+		break
+	case "ERROR":
+		log.GlobalLogger = log.New(log.ERROR)
+		break
+	case "FATAL":
+		log.GlobalLogger = log.New(log.FATAL)
+		break
+	default:
+		break
+	}
+
+	if err := server.New().Start(); err != nil {
+		log.GlobalLogger.Error("Server start error: ", err)
+	}
 }

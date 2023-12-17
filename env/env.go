@@ -8,6 +8,9 @@ import (
 	"strconv"
 )
 
+const LOCKSMITH_PORT string = "LOCKSMITH_PORT"
+const LOCKSMITH_PORT_DEFAULT uint16 = 9000
+
 type ErrorNotFound struct {
 	name string
 }
@@ -64,4 +67,13 @@ func GetRequiredInteger(name string) (int, error) {
 		return int(i64), err
 	}
 	return 0, newErrorNotFound(name)
+}
+
+func GetOptionalUint16(name string, def uint16) (uint16, error) {
+	if v, e := os.LookupEnv(name); e {
+		// by setting a base of 0, the base is implied by the string's format
+		i64, err := strconv.ParseUint(v, 0, 16)
+		return uint16(i64), err
+	}
+	return def, nil
 }

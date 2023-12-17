@@ -11,15 +11,20 @@ var logger = log.GlobalLogger
 
 type Locksmith struct {
 	tcpAcceptor connection.TCPAcceptor
+	options     *LocksmithOptions
 }
 
-func New() *Locksmith {
-	return &Locksmith{}
+type LocksmithOptions struct {
+	Port uint16
 }
 
-func (locksmith *Locksmith) Start(port uint16) error {
+func New(options *LocksmithOptions) *Locksmith {
+	return &Locksmith{options: options}
+}
+
+func (locksmith *Locksmith) Start() error {
 	locksmith.tcpAcceptor = connection.NewTCPAcceptor(locksmith.handleConnection)
-	return locksmith.tcpAcceptor.Start(port)
+	return locksmith.tcpAcceptor.Start(locksmith.options.Port)
 }
 
 func (locksmith *Locksmith) handleConnection(conn net.Conn) {

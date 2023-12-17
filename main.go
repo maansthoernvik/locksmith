@@ -30,7 +30,7 @@ func main() {
 	}
 
 	port, _ := env.GetOptionalUint16(env.LOCKSMITH_PORT, env.LOCKSMITH_PORT_DEFAULT)
-	if err := server.New().Start(port); err != nil {
+	if err := server.New(&server.LocksmithOptions{Port: port}).Start(); err != nil {
 		log.GlobalLogger.Error("Server start error: ", err)
 	}
 	log.GlobalLogger.Info("Server started on port: ", port)

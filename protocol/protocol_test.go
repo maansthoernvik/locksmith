@@ -61,32 +61,50 @@ func TestProtocol_messedUpMessages(t *testing.T) {
 
 	weirdMessages := [][]byte{
 		// ????
-		{100, 9, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70},
-		{50, 8, 70, 70, 70, 70, 70, 70, 70},
+		{100, 9, 70, 70, 70, 70, 70, 70, 70, 70, 70},
+		{50, 8, 70, 70, 70, 70, 70, 70, 70, 70},
 	}
 
 	for _, message := range acquireMessages {
 		_, err := DecodeServerMessage(message)
 		if !errors.Is(err, LockTagSizeError) {
 			t.Error("Did not get error...")
+		} else {
+			t.Log("Got expected LockTagSizeError: ", err)
 		}
-		t.Log("Got expected LockTagSizeError: ", err)
 	}
 
 	for _, message := range releaseMessages {
 		_, err := DecodeServerMessage(message)
 		if !errors.Is(err, ServerMessageDecodeError) {
 			t.Error("Did not get error...")
+		} else {
+			t.Log("Got expected ServerMessageDecodeError: ", err)
 		}
-		t.Log("Got expected ServerMessageDecodeError: ", err)
 	}
 
 	for _, message := range weirdMessages {
 		_, err := DecodeServerMessage(message)
 		if !errors.Is(err, ServerMessageTypeError) {
 			t.Error("Did not get error...")
+		} else {
+			t.Log("Got expected ServerMessageTypeError: ", err)
 		}
-		t.Log("Got expected ServerMessageTypeError: ", err)
+	}
+}
+
+func TestProtocol_BadLockTagEncoding(t *testing.T) {
+	messages := [][]byte{
+		{0, 2, 0xc3, 0x28},
+	}
+
+	for _, message := range messages {
+		_, err := DecodeServerMessage(message)
+		if !errors.Is(err, LockTagEncodingError) {
+			t.Error("Did not get error...")
+		} else {
+			t.Log("Got expected error: ", err)
+		}
 	}
 }
 
@@ -140,9 +158,16 @@ func TestProtocol_IncomingMessage(t *testing.T) {
 				t.Error("MessageType did not match for iteration ", i)
 			}
 			if im.LockTag != expected[i].LockTag {
-				t.Error("MessageType did not match for iteration ", i)
+				t.Error("Lock tag did not match for iteration ", i)
+				t.Errorf("Got: %s Expected: %s", im.LockTag, expected[i].LockTag)
 			}
 		})
 
 	}
+}
+
+func TestProtocol_EncodeClientMessage(t *testing.T) {
+	res := EncodeClientMessage(&OutgoingMessage{MessageType: Released, LockTag: "abc"})
+
+	t.Log(res)
 }

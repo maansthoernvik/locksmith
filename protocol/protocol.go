@@ -2,6 +2,8 @@ package protocol
 
 import (
 	"errors"
+	"strings"
+	"unicode/utf8"
 )
 
 type ServerMessageType byte
@@ -20,15 +22,24 @@ const (
 var ServerMessageDecodeError = errors.New("Server message decoding error")
 var ServerMessageTypeError = errors.New("Server message type not found")
 var LockTagSizeError = errors.New("Lock tag size does not match actual lock tag size")
+var LockTagEncodingError = errors.New("Lock tag was not valid UTF8")
 
 type IncomingMessage struct {
 	MessageType ServerMessageType
 	LockTag     string
 }
 
+type OutgoingMessage struct {
+	MessageType ClientMessage
+	LockTag     string
+}
+
 func DecodeServerMessage(bytes []byte) (*IncomingMessage, error) {
 	if len(bytes) < 3 || len(bytes) > 257 {
 		return nil, ServerMessageDecodeError
+	}
+	if len(bytes[2:]) != int(bytes[1]) {
+		return nil, LockTagSizeError
 	}
 	messageType, err := decodeServerMessageType(bytes)
 	if err != nil {
@@ -42,6 +53,15 @@ func DecodeServerMessage(bytes []byte) (*IncomingMessage, error) {
 	return &IncomingMessage{MessageType: messageType, LockTag: lockTag}, nil
 }
 
+func EncodeClientMessage(clientMessage *OutgoingMessage) []byte {
+	bytes := make([]byte, 2)
+	bytes[0] = byte(Released)
+	bytes[1] = byte(len(clientMessage.LockTag))
+	bytes = append(bytes, []byte(clientMessage.LockTag)...)
+
+	return bytes
+}
+
 func decodeServerMessageType(bytes []byte) (ServerMessageType, error) {
 	switch bytes[0] {
 	case byte(Acquire):
@@ -52,9 +72,12 @@ func decodeServerMessageType(bytes []byte) (ServerMessageType, error) {
 	return 0, ServerMessageTypeError
 }
 
-func decodeLockTag(bytes []byte, lock_tag_size byte) (string, error) {
-	if len(bytes) != int(lock_tag_size)+2 {
-		return "", LockTagSizeError
+func decodeLockTag(bytes []byte, lockTagSize byte) (string, error) {
+	lockTag := bytes[2:]
+	if !utf8.Valid(lockTag) {
+		return "", LockTagEncodingError
 	}
-	return string(bytes[2:]), nil
+	builder := strings.Builder{}
+	builder.Write(lockTag)
+	return builder.String(), nil
 }

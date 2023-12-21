@@ -54,7 +54,7 @@ func DecodeServerMessage(bytes []byte) (*IncomingMessage, error) {
 }
 
 func EncodeClientMessage(clientMessage *OutgoingMessage) []byte {
-	bytes := make([]byte, 2)
+	bytes := make([]byte, 2+len(clientMessage.LockTag))
 	bytes[0] = byte(Released)
 	bytes[1] = byte(len(clientMessage.LockTag))
 	bytes = append(bytes, []byte(clientMessage.LockTag)...)

@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/maansthoernvik/locksmith/log"
+	"github.com/maansthoernvik/locksmith/protocol"
 	"github.com/maansthoernvik/locksmith/server/connection"
 )
 
@@ -60,11 +61,38 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 	log.GlobalLogger.Debug("Connection accepted from:", conn.RemoteAddr().String())
 	for {
 		buffer := make([]byte, 257)
-		if _, err := conn.Read(buffer); err == io.EOF {
-			log.GlobalLogger.Info("Connection", conn.RemoteAddr().String(), "closed by remote (EOF)")
+		n, err := conn.Read(buffer)
+		if err == io.EOF {
+			log.GlobalLogger.Info("Connection", conn.RemoteAddr().String(),
+				"closed by remote (EOF)")
 			conn.Close()
 			break
 		}
-		log.GlobalLogger.Info("Buffer contains:", buffer)
+		log.GlobalLogger.Debug("Got message (", n, "chars)")
+		log.GlobalLogger.Debug("Buffer contains:", buffer)
+		log.GlobalLogger.Debug("Interesting part of the buffer:", buffer[:n])
+
+		incomingMessage, err := protocol.DecodeServerMessage(buffer[:n])
+		if err != nil {
+			log.GlobalLogger.Error("Decoding error, closing connection ("+
+				conn.RemoteAddr().String()+"): ", err)
+			conn.Close()
+			break
+		}
+
+		outgoingMessage := locksmith.handleIncomingMessage(incomingMessage)
+		if outgoingMessage != nil {
+			conn.Write(
+				protocol.EncodeClientMessage(
+					outgoingMessage,
+				),
+			)
+		}
 	}
+}
+
+func (Locksmith *Locksmith) handleIncomingMessage(
+	incomingMessage *protocol.IncomingMessage,
+) *protocol.OutgoingMessage {
+	return nil
 }

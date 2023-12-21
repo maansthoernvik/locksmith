@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"io"
 	"net"
 
 	"github.com/maansthoernvik/locksmith/log"
@@ -30,13 +31,18 @@ func New(options *LocksmithOptions) *Locksmith {
 }
 
 func (locksmith *Locksmith) Start(ctx context.Context) error {
-	locksmith.tcpAcceptor = connection.NewTCPAcceptor(locksmith.handleConnection)
-	err := locksmith.tcpAcceptor.Start(locksmith.options.Port)
+	locksmith.tcpAcceptor = connection.NewTCPAcceptor(
+		&connection.TCPAcceptorOptions{
+			Port:    locksmith.options.Port,
+			Handler: locksmith.handleConnection,
+		},
+	)
+	err := locksmith.tcpAcceptor.Start()
 	if err != nil {
 		log.GlobalLogger.Error("Failed to start TCP acceptor")
 		return err
 	}
-	log.GlobalLogger.Info("Started locksmith on port: ", locksmith.options.Port)
+	log.GlobalLogger.Info("Started locksmith on port:", locksmith.options.Port)
 
 	locksmith.status = STARTED
 
@@ -51,5 +57,14 @@ func (locksmith *Locksmith) Start(ctx context.Context) error {
 
 // Incoming connections from the TCP acceptor come here first.
 func (locksmith *Locksmith) handleConnection(conn net.Conn) {
-	log.GlobalLogger.Debug("Connection accepted", conn)
+	log.GlobalLogger.Debug("Connection accepted from:", conn.RemoteAddr().String())
+	for {
+		buffer := make([]byte, 257)
+		if _, err := conn.Read(buffer); err == io.EOF {
+			log.GlobalLogger.Info("Connection", conn.RemoteAddr().String(), "closed by remote (EOF)")
+			conn.Close()
+			break
+		}
+		log.GlobalLogger.Info("Buffer contains:", buffer)
+	}
 }

@@ -8,22 +8,32 @@ import (
 )
 
 type TCPAcceptor interface {
-	Start(port uint16) error
+	Start() error
 	Stop()
 }
 
 type TCPAcceptorImpl struct {
-	listener net.Listener
+	port     uint16
 	handler  func(net.Conn)
+	listener net.Listener
 	stop     chan interface{}
 }
 
-func NewTCPAcceptor(handler func(conn net.Conn)) TCPAcceptor {
-	return &TCPAcceptorImpl{handler: handler, stop: make(chan interface{})}
+type TCPAcceptorOptions struct {
+	Handler func(net.Conn)
+	Port    uint16
 }
 
-func (tcpAcceptor *TCPAcceptorImpl) Start(port uint16) error {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func NewTCPAcceptor(options *TCPAcceptorOptions) TCPAcceptor {
+	return &TCPAcceptorImpl{
+		port:    options.Port,
+		handler: options.Handler,
+		stop:    make(chan interface{}),
+	}
+}
+
+func (tcpAcceptor *TCPAcceptorImpl) Start() error {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", tcpAcceptor.port))
 	if err != nil {
 		return err
 	}

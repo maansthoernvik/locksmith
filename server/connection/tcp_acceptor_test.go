@@ -14,15 +14,18 @@ func TestTcpAcceptor_AcceptConnections(t *testing.T) {
 	wg.Add(1)
 
 	handled_connection := false
-	tcpAcceptor := NewTCPAcceptor(func(conn net.Conn) {
-		t.Log("Connection handler called!")
-		handled_connection = true
-		defer conn.Close()
-		wg.Done()
+	tcpAcceptor := NewTCPAcceptor(&TCPAcceptorOptions{
+		Handler: func(conn net.Conn) {
+			t.Log("Connection handler called!")
+			handled_connection = true
+			defer conn.Close()
+			wg.Done()
+		},
+		Port: 30000,
 	})
 	// Use a port that isn't likely in use nor in a range that could be
 	// privileged.
-	err := tcpAcceptor.Start(30000)
+	err := tcpAcceptor.Start()
 	if err != nil {
 		t.Error("Failed to start TCP acceptor %w", err)
 	}

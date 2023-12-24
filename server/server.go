@@ -8,6 +8,7 @@ import (
 	"github.com/maansthoernvik/locksmith/log"
 	"github.com/maansthoernvik/locksmith/protocol"
 	"github.com/maansthoernvik/locksmith/server/connection"
+	"github.com/maansthoernvik/locksmith/vault"
 )
 
 type LocksmithStatus string
@@ -21,6 +22,7 @@ type Locksmith struct {
 	tcpAcceptor connection.TCPAcceptor
 	status      LocksmithStatus
 	options     *LocksmithOptions
+	vault       vault.Vault
 }
 
 type LocksmithOptions struct {
@@ -28,7 +30,11 @@ type LocksmithOptions struct {
 }
 
 func New(options *LocksmithOptions) *Locksmith {
-	return &Locksmith{options: options, status: STOPPED}
+	return &Locksmith{
+		options: options,
+		status:  STOPPED,
+		vault:   vault.NewVault(&vault.VaultOptions{QueueType: vault.Single}),
+	}
 }
 
 func (locksmith *Locksmith) Start(ctx context.Context) error {
@@ -67,7 +73,12 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 				"closed by remote (EOF)")
 			conn.Close()
 			break
+		} else if err != nil {
+			log.GlobalLogger.Info("Connection closed:", err)
+			conn.Close()
+			break
 		}
+
 		log.GlobalLogger.Debug("Got message (", n, "chars)")
 		log.GlobalLogger.Debug("Buffer contains:", buffer)
 		log.GlobalLogger.Debug("Interesting part of the buffer:", buffer[:n])
@@ -80,19 +91,52 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 			break
 		}
 
-		outgoingMessage := locksmith.handleIncomingMessage(incomingMessage)
-		if outgoingMessage != nil {
-			conn.Write(
-				protocol.EncodeClientMessage(
-					outgoingMessage,
-				),
-			)
-		}
+		locksmith.handleIncomingMessage(conn, incomingMessage)
 	}
 }
 
-func (Locksmith *Locksmith) handleIncomingMessage(
+func (locksmith *Locksmith) handleIncomingMessage(
+	conn net.Conn,
 	incomingMessage *protocol.IncomingMessage,
-) *protocol.OutgoingMessage {
-	return nil
+) {
+	switch incomingMessage.MessageType {
+	case protocol.Acquire:
+		locksmith.vault.Acquire(incomingMessage.LockTag, conn.RemoteAddr().String(), locksmith.acquireCallback(conn, incomingMessage.LockTag))
+		break
+	case protocol.Release:
+		locksmith.vault.Release(incomingMessage.LockTag, conn.RemoteAddr().String(), locksmith.releaseCallback(conn))
+		break
+	default:
+		log.GlobalLogger.Error("Invalid message type")
+	}
+}
+
+func (locksmith *Locksmith) acquireCallback(
+	conn net.Conn,
+	lockTag string,
+) func(error) {
+	return func(err error) {
+		if err != nil {
+			log.GlobalLogger.Error("Got error in acquire callback:", err)
+			conn.Close()
+			return
+		}
+
+		log.GlobalLogger.Debug("Notifying client of acquisition for lock tag", lockTag)
+		conn.Write(protocol.EncodeClientMessage(&protocol.OutgoingMessage{
+			MessageType: protocol.Acquired,
+			LockTag:     lockTag,
+		}))
+	}
+}
+
+func (locksmith *Locksmith) releaseCallback(
+	conn net.Conn,
+) func(error) {
+	return func(err error) {
+		if err != nil {
+			log.GlobalLogger.Error("Got error in release callback:", err)
+			conn.Close()
+		}
+	}
 }

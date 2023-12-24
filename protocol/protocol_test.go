@@ -167,7 +167,7 @@ func TestProtocol_IncomingMessage(t *testing.T) {
 }
 
 func TestProtocol_EncodeClientMessage(t *testing.T) {
-	res := EncodeClientMessage(&OutgoingMessage{MessageType: Released, LockTag: "abc"})
+	res := EncodeClientMessage(&OutgoingMessage{MessageType: Acquired, LockTag: "abc"})
 
 	t.Log(res)
 }

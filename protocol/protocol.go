@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/maansthoernvik/locksmith/log"
 )
 
 type ServerMessageType byte
@@ -16,7 +18,7 @@ const (
 type ClientMessage byte
 
 const (
-	Released ClientMessage = 0x0
+	Acquired ClientMessage = 0x0
 )
 
 var ServerMessageDecodeError = errors.New("Server message decoding error")
@@ -35,9 +37,12 @@ type OutgoingMessage struct {
 }
 
 func DecodeServerMessage(bytes []byte) (*IncomingMessage, error) {
+	log.GlobalLogger.Debug("Decoding:", bytes)
 	if len(bytes) < 3 || len(bytes) > 257 {
 		return nil, ServerMessageDecodeError
 	}
+	log.GlobalLogger.Debug("Lock tag:", bytes[2:])
+	log.GlobalLogger.Debug("Supposed lock tag size:", int(bytes[1]))
 	if len(bytes[2:]) != int(bytes[1]) {
 		return nil, LockTagSizeError
 	}
@@ -55,9 +60,16 @@ func DecodeServerMessage(bytes []byte) (*IncomingMessage, error) {
 
 func EncodeClientMessage(clientMessage *OutgoingMessage) []byte {
 	bytes := make([]byte, 2+len(clientMessage.LockTag))
-	bytes[0] = byte(Released)
+	log.GlobalLogger.Debug("Initialized slice with size:", len(bytes))
+	bytes[0] = byte(Acquired)
+	log.GlobalLogger.Debug("Added Acquired message type:", bytes)
 	bytes[1] = byte(len(clientMessage.LockTag))
-	bytes = append(bytes, []byte(clientMessage.LockTag)...)
+	log.GlobalLogger.Debug("Added lock tag size:", bytes)
+	log.GlobalLogger.Debug("Encoding lock tag:", clientMessage.LockTag)
+	for i := 0; i < len(clientMessage.LockTag); i++ {
+		bytes[i+2] = byte(clientMessage.LockTag[i])
+	}
+	log.GlobalLogger.Debug("Encoded client message:", bytes)
 
 	return bytes
 }

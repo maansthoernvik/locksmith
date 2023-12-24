@@ -32,15 +32,31 @@ func main() {
 	//nolint
 	conn.Write(Acquire())
 
+	conn2, err := net.Dial("tcp", "localhost:9000")
+	conn2.Write(Acquire())
+
+	go func() {
+		bs := make([]byte, 10)
+		n, _ := conn2.Read(bs)
+		log.Println("Connection #2 got", n, "bytes:", bs)
+		log.Println("Connection #2 releasing...")
+		conn2.Write(Release())
+
+		time.Sleep(1)
+
+		conn2.Close()
+	}()
+
 	// await acquisition notification...
 	bytes := make([]byte, 10)
 	n, err := conn.Read(bytes)
 	if err != nil {
 		log.Fatalln("Failed to read bytes:", err)
 	}
-	log.Println("Got", n, "bytes:", bytes)
+	log.Println("Connection #1 got", n, "bytes:", bytes)
 
 	//nolint
+	log.Println("Connection #1 releasing...")
 	conn.Write(Release())
 
 	time.Sleep(1 * time.Second)

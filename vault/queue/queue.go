@@ -9,4 +9,5 @@ import "github.com/maansthoernvik/locksmith/protocol"
 type QueueLayer interface {
 	Enqueue(action protocol.ServerMessageType, lockTag string, client string, callback func(error))
 	Waitlist(lockTag string, client string, callback func(error))
+	PopWaitlist(lockTag string)
 }

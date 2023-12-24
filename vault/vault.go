@@ -112,7 +112,11 @@ func (vaultImpl *VaultImpl) synchronizedLockTagAccess(
 		// a second acquire is a protocol offense, callback with error and
 		// release the lock, pop waitlisted client.
 		if currentState.client == client {
+			currentState.client = ""
+			currentState.lockState = UNLOCKED
+			vaultImpl.state[lockTag] = currentState
 			callback(UnecessaryAcquireError)
+			vaultImpl.queueLayer.PopWaitlist(lockTag)
 			// client didn't match, and the lock state is LOCKED, waitlist the
 			// client
 		} else if currentState.lockState == LOCKED {
@@ -138,6 +142,7 @@ func (vaultImpl *VaultImpl) synchronizedLockTagAccess(
 			currentState.lockState = UNLOCKED
 			vaultImpl.state[lockTag] = currentState
 			callback(nil)
+			vaultImpl.queueLayer.PopWaitlist(lockTag)
 		}
 	}
 	log.GlobalLogger.Debug("Resulting vault state: \n", vaultImpl.state)

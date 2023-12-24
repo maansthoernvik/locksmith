@@ -7,7 +7,13 @@ import (
 
 type SingleQueue struct {
 	queue                chan *queueItem
+	waitlist             map[string][]waitListed
 	synchronizedCallback func(protocol.ServerMessageType, string, string, func(error))
+}
+
+type waitListed struct {
+	client   string
+	callback func(error)
 }
 
 type queueItem struct {
@@ -17,8 +23,15 @@ type queueItem struct {
 	callback func(error)
 }
 
-func NewSingleQueue(size int, synchronizedCallback func(protocol.ServerMessageType, string, string, func(error))) QueueLayer {
-	q := &SingleQueue{queue: make(chan *queueItem, size), synchronizedCallback: synchronizedCallback}
+func NewSingleQueue(
+	size int,
+	synchronizedCallback func(protocol.ServerMessageType, string, string, func(error)),
+) QueueLayer {
+	q := &SingleQueue{
+		queue:                make(chan *queueItem, size),
+		waitlist:             make(map[string][]waitListed),
+		synchronizedCallback: synchronizedCallback,
+	}
 	go func() {
 		for {
 			qi := <-q.queue
@@ -36,6 +49,24 @@ func (singleQueue *SingleQueue) Enqueue(action protocol.ServerMessageType, lockT
 
 func (singleQueue *SingleQueue) Waitlist(lockTag string, client string, callback func(error)) {
 	log.GlobalLogger.Debug("Waitlisting client", client, "for lock", lockTag)
+	_, ok := singleQueue.waitlist[lockTag]
+	if !ok {
+		singleQueue.waitlist[lockTag] = []waitListed{{client, callback}}
+	} else {
+		singleQueue.waitlist[lockTag] = append(singleQueue.waitlist[lockTag], waitListed{client, callback})
+	}
+	log.GlobalLogger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
+}
+
+func (singleQueue *SingleQueue) PopWaitlist(lockTag string) {
+	log.GlobalLogger.Debug("Popping fom waitlist:", lockTag)
+	if wl, ok := singleQueue.waitlist[lockTag]; ok && len(wl) > 0 {
+		log.GlobalLogger.Debug("Found waitlist for", lockTag)
+		first := wl[0]
+		singleQueue.waitlist[lockTag] = wl[1:]
+		singleQueue.synchronizedCallback(protocol.Acquire, first.client, lockTag, first.callback)
+	}
+	log.GlobalLogger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
 }
 
 func (singleQueue *SingleQueue) handlePop(qi *queueItem) {

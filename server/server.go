@@ -102,10 +102,8 @@ func (locksmith *Locksmith) handleIncomingMessage(
 	switch incomingMessage.MessageType {
 	case protocol.Acquire:
 		locksmith.vault.Acquire(incomingMessage.LockTag, conn.RemoteAddr().String(), locksmith.acquireCallback(conn, incomingMessage.LockTag))
-		break
 	case protocol.Release:
 		locksmith.vault.Release(incomingMessage.LockTag, conn.RemoteAddr().String(), locksmith.releaseCallback(conn))
-		break
 	default:
 		log.GlobalLogger.Error("Invalid message type")
 	}
@@ -123,10 +121,13 @@ func (locksmith *Locksmith) acquireCallback(
 		}
 
 		log.GlobalLogger.Debug("Notifying client of acquisition for lock tag", lockTag)
-		conn.Write(protocol.EncodeClientMessage(&protocol.OutgoingMessage{
+		_, writeErr := conn.Write(protocol.EncodeClientMessage(&protocol.OutgoingMessage{
 			MessageType: protocol.Acquired,
 			LockTag:     lockTag,
 		}))
+		if writeErr != nil {
+			log.GlobalLogger.Error("Failed to write to client:", writeErr)
+		}
 	}
 }
 

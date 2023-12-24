@@ -123,7 +123,6 @@ func (vaultImpl *VaultImpl) synchronizedLockTagAccess(
 			vaultImpl.state[lockTag] = currentState
 			callback(nil)
 		}
-		break
 	case protocol.Release:
 		// if already unlocked, kill the client for not following the protocol
 		if currentState.lockState == UNLOCKED {
@@ -140,7 +139,6 @@ func (vaultImpl *VaultImpl) synchronizedLockTagAccess(
 			vaultImpl.state[lockTag] = currentState
 			callback(nil)
 		}
-		break
 	}
 	log.GlobalLogger.Debug("Resulting vault state: \n", vaultImpl.state)
 }

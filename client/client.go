@@ -6,11 +6,11 @@ import (
 	"time"
 )
 
-type something struct {
-	someValue string
-}
+// type something struct {
+// 	someValue string
+// }
 
-var globalMap = make(map[string]something, 2)
+// var globalMap = make(map[string]something, 2)
 
 func main() {
 	conn, err := net.Dial("tcp", "localhost:9000")
@@ -29,6 +29,7 @@ func main() {
 
 	// return
 
+	//nolint
 	conn.Write(Acquire())
 
 	// await acquisition notification...
@@ -39,6 +40,7 @@ func main() {
 	}
 	log.Println("Got", n, "bytes:", bytes)
 
+	//nolint
 	conn.Write(Release())
 
 	time.Sleep(1 * time.Second)

@@ -48,11 +48,11 @@ type VaultOptions struct {
 func NewVault(vaultOptions *VaultOptions) Vault {
 	vaultImpl := &VaultImpl{state: make(map[string]lockInfo)}
 	if vaultOptions.QueueType == Single {
-		vaultImpl.queueLayer = queue.NewSingleQueue(300, vaultImpl.synchronizedLockTagAccess)
+		vaultImpl.queueLayer = queue.NewSingleQueue(300, vaultImpl)
 	} else if vaultOptions.QueueType == Multi {
 		panic("Multi queue type not implemented")
 	} else {
-		vaultImpl.queueLayer = queue.NewSingleQueue(300, vaultImpl.synchronizedLockTagAccess)
+		vaultImpl.queueLayer = queue.NewSingleQueue(300, vaultImpl)
 	}
 
 	return vaultImpl
@@ -94,10 +94,10 @@ func (vaultImpl *VaultImpl) enqueue(
 
 // This member function is the only function allowed to touch the vault's lock
 // states. It is called from the queue layer after a dispatch via Enqueue().
-func (vaultImpl *VaultImpl) synchronizedLockTagAccess(
+func (vaultImpl *VaultImpl) Synchronized(
 	action protocol.ServerMessageType,
-	client string,
 	lockTag string,
+	client string,
 	callback func(error),
 ) {
 	log.GlobalLogger.Debug("Entering synchronized access block for lock tag", lockTag, "on behalf of client", client)

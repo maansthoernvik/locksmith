@@ -7,7 +7,22 @@ import "github.com/maansthoernvik/locksmith/protocol"
 // the vault can be sure that no other concurrent process is currently
 // accessing the given lock tag.
 type QueueLayer interface {
-	Enqueue(action protocol.ServerMessageType, lockTag string, client string, callback func(error))
+	Enqueue(
+		action protocol.ServerMessageType,
+		lockTag string,
+		client string,
+		callback func(error),
+	)
 	Waitlist(lockTag string, client string, callback func(error))
 	PopWaitlist(lockTag string)
+}
+
+// Interface for calls made by the synchronization thread in the queue layer.
+type Synchronized interface {
+	Synchronized(
+		action protocol.ServerMessageType,
+		lockTag string,
+		client string,
+		callback func(error),
+	)
 }

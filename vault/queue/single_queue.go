@@ -6,9 +6,9 @@ import (
 )
 
 type SingleQueue struct {
-	queue                chan *queueItem
-	waitlist             map[string][]waitListed
-	synchronizedCallback func(protocol.ServerMessageType, string, string, func(error))
+	queue        chan *queueItem
+	waitlist     map[string][]waitListed
+	synchronized Synchronized
 }
 
 type waitListed struct {
@@ -25,12 +25,12 @@ type queueItem struct {
 
 func NewSingleQueue(
 	size int,
-	synchronizedCallback func(protocol.ServerMessageType, string, string, func(error)),
+	synchronized Synchronized,
 ) QueueLayer {
 	q := &SingleQueue{
-		queue:                make(chan *queueItem, size),
-		waitlist:             make(map[string][]waitListed),
-		synchronizedCallback: synchronizedCallback,
+		queue:        make(chan *queueItem, size),
+		waitlist:     make(map[string][]waitListed),
+		synchronized: synchronized,
 	}
 	go func() {
 		for {
@@ -64,11 +64,11 @@ func (singleQueue *SingleQueue) PopWaitlist(lockTag string) {
 		log.GlobalLogger.Debug("Found waitlist for", lockTag)
 		first := wl[0]
 		singleQueue.waitlist[lockTag] = wl[1:]
-		singleQueue.synchronizedCallback(protocol.Acquire, first.client, lockTag, first.callback)
+		singleQueue.synchronized.Synchronized(protocol.Acquire, lockTag, first.client, first.callback)
 	}
 	log.GlobalLogger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
 }
 
 func (singleQueue *SingleQueue) handlePop(qi *queueItem) {
-	singleQueue.synchronizedCallback(qi.action, qi.client, qi.lockTag, qi.callback)
+	singleQueue.synchronized.Synchronized(qi.action, qi.lockTag, qi.client, qi.callback)
 }

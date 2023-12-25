@@ -5,11 +5,19 @@ import (
 	"io"
 	"net"
 
+	"github.com/maansthoernvik/locksmith/env"
 	"github.com/maansthoernvik/locksmith/log"
 	"github.com/maansthoernvik/locksmith/protocol"
 	"github.com/maansthoernvik/locksmith/server/connection"
 	"github.com/maansthoernvik/locksmith/vault"
 )
+
+var logger *log.Logger
+
+func init() {
+	logLevel, _ := env.GetOptionalString(env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT)
+	logger = log.New(log.Translate(logLevel))
+}
 
 type LocksmithStatus string
 
@@ -46,15 +54,15 @@ func (locksmith *Locksmith) Start(ctx context.Context) error {
 	)
 	err := locksmith.tcpAcceptor.Start()
 	if err != nil {
-		log.GlobalLogger.Error("Failed to start TCP acceptor")
+		logger.Error("Failed to start TCP acceptor")
 		return err
 	}
-	log.GlobalLogger.Info("Started locksmith on port:", locksmith.options.Port)
+	logger.Info("Started locksmith on port:", locksmith.options.Port)
 
 	locksmith.status = STARTED
 
 	<-ctx.Done()
-	log.GlobalLogger.Info("Stopping locksmith")
+	logger.Info("Stopping locksmith")
 	locksmith.tcpAcceptor.Stop()
 
 	locksmith.status = STOPPED
@@ -64,28 +72,28 @@ func (locksmith *Locksmith) Start(ctx context.Context) error {
 
 // Incoming connections from the TCP acceptor come here first.
 func (locksmith *Locksmith) handleConnection(conn net.Conn) {
-	log.GlobalLogger.Debug("Connection accepted from:", conn.RemoteAddr().String())
+	logger.Info("Connection accepted from:", conn.RemoteAddr().String())
 	for {
 		buffer := make([]byte, 257)
 		n, err := conn.Read(buffer)
 		if err == io.EOF {
-			log.GlobalLogger.Info("Connection", conn.RemoteAddr().String(),
+			logger.Info("Connection", conn.RemoteAddr().String(),
 				"closed by remote (EOF)")
 			conn.Close()
 			break
 		} else if err != nil {
-			log.GlobalLogger.Info("Connection closed:", err)
+			logger.Info("Connection closed:", err)
 			conn.Close()
 			break
 		}
 
-		log.GlobalLogger.Debug("Got message (", n, "chars)")
-		log.GlobalLogger.Debug("Buffer contains:", buffer)
-		log.GlobalLogger.Debug("Interesting part of the buffer:", buffer[:n])
+		logger.Debug("Got message (", n, "chars)")
+		logger.Debug("Buffer contains:", buffer)
+		logger.Debug("Interesting part of the buffer:", buffer[:n])
 
 		incomingMessage, err := protocol.DecodeServerMessage(buffer[:n])
 		if err != nil {
-			log.GlobalLogger.Error("Decoding error, closing connection ("+
+			logger.Error("Decoding error, closing connection ("+
 				conn.RemoteAddr().String()+"): ", err)
 			conn.Close()
 			break
@@ -105,7 +113,7 @@ func (locksmith *Locksmith) handleIncomingMessage(
 	case protocol.Release:
 		locksmith.vault.Release(incomingMessage.LockTag, conn.RemoteAddr().String(), locksmith.releaseCallback(conn))
 	default:
-		log.GlobalLogger.Error("Invalid message type")
+		logger.Error("Invalid message type")
 	}
 }
 
@@ -115,18 +123,18 @@ func (locksmith *Locksmith) acquireCallback(
 ) func(error) error {
 	return func(err error) error {
 		if err != nil {
-			log.GlobalLogger.Error("Got error in acquire callback:", err)
+			logger.Error("Got error in acquire callback:", err)
 			conn.Close()
 			return nil
 		}
 
-		log.GlobalLogger.Debug("Notifying client of acquisition for lock tag", lockTag)
+		logger.Debug("Notifying client of acquisition for lock tag", lockTag)
 		_, writeErr := conn.Write(protocol.EncodeClientMessage(&protocol.OutgoingMessage{
 			MessageType: protocol.Acquired,
 			LockTag:     lockTag,
 		}))
 		if writeErr != nil {
-			log.GlobalLogger.Error("Failed to write to client:", writeErr)
+			logger.Error("Failed to write to client:", writeErr)
 			return writeErr
 		}
 
@@ -139,7 +147,7 @@ func (locksmith *Locksmith) releaseCallback(
 ) func(error) error {
 	return func(err error) error {
 		if err != nil {
-			log.GlobalLogger.Error("Got error in release callback:", err)
+			logger.Error("Got error in release callback:", err)
 			conn.Close()
 		}
 

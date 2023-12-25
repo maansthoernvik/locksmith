@@ -23,15 +23,15 @@ func main() {
 		signal_ch := make(chan os.Signal, 1)
 		signal.Notify(signal_ch, syscall.SIGINT, syscall.SIGTERM)
 		signal := <-signal_ch
-		log.GlobalLogger.Info("Got signal: ", signal)
+		logger.Info("Got signal: ", signal)
 		cancel()
 	}()
 
 	port, _ := env.GetOptionalUint16(env.LOCKSMITH_PORT, env.LOCKSMITH_PORT_DEFAULT)
 	if err := server.New(&server.LocksmithOptions{Port: port}).Start(ctx); err != nil {
-		log.GlobalLogger.Error("Server start error: ", err)
+		logger.Error("Server start error: ", err)
 		os.Exit(1)
 	}
 
-	log.GlobalLogger.Info("Server stopped")
+	logger.Info("Server stopped")
 }

@@ -1,8 +1,16 @@
 package queue
 
 import (
+	"github.com/maansthoernvik/locksmith/env"
 	"github.com/maansthoernvik/locksmith/log"
 )
+
+var logger *log.Logger
+
+func init() {
+	logLevel, _ := env.GetOptionalString(env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT)
+	logger = log.New(log.Translate(logLevel))
+}
 
 type SingleQueue struct {
 	queue        chan *queueItem
@@ -27,7 +35,7 @@ func NewSingleQueue(
 	go func() {
 		for {
 			qi := <-q.queue
-			log.GlobalLogger.Debug("Popped queue item")
+			logger.Debug("Popped queue item")
 			q.handlePop(qi)
 		}
 	}()
@@ -35,25 +43,25 @@ func NewSingleQueue(
 }
 
 func (singleQueue *SingleQueue) Enqueue(lockTag string, callback func(string)) {
-	log.GlobalLogger.Debug("Queueing up for lock tag:", lockTag)
+	logger.Debug("Queueing up for lock tag:", lockTag)
 	singleQueue.queue <- &queueItem{lockTag: lockTag, callback: callback}
 }
 
 func (singleQueue *SingleQueue) Waitlist(lockTag string, callback func(string)) {
-	log.GlobalLogger.Debug("Waitlisting client for lock tag:", lockTag)
+	logger.Debug("Waitlisting client for lock tag:", lockTag)
 	_, ok := singleQueue.waitlist[lockTag]
 	if !ok {
 		singleQueue.waitlist[lockTag] = []*queueItem{{lockTag, callback}}
 	} else {
 		singleQueue.waitlist[lockTag] = append(singleQueue.waitlist[lockTag], &queueItem{lockTag, callback})
 	}
-	log.GlobalLogger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
+	logger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
 }
 
 func (singleQueue *SingleQueue) PopWaitlist(lockTag string) {
-	log.GlobalLogger.Debug("Popping fom waitlist:", lockTag)
+	logger.Debug("Popping fom waitlist:", lockTag)
 	if wl, ok := singleQueue.waitlist[lockTag]; ok && len(wl) > 0 {
-		log.GlobalLogger.Debug("Found waitlist for", lockTag)
+		logger.Debug("Found waitlist for", lockTag)
 		first := wl[0]
 
 		if len(wl) == 1 {
@@ -62,9 +70,9 @@ func (singleQueue *SingleQueue) PopWaitlist(lockTag string) {
 			singleQueue.waitlist[lockTag] = wl[1:]
 		}
 		singleQueue.synchronized.Synchronized(lockTag, first.callback)
-		log.GlobalLogger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
+		logger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
 	} else {
-		log.GlobalLogger.Debug("No waitlisted clients for lock tag:", lockTag)
+		logger.Debug("No waitlisted clients for lock tag:", lockTag)
 	}
 }
 

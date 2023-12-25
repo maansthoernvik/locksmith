@@ -91,13 +91,17 @@ func (vaultImpl *VaultImpl) acquireAction(client string, callback func(error) er
 			currentState.client = ""
 			currentState.lockState = UNLOCKED
 			vaultImpl.state[lockTag] = currentState
-			callback(UnecessaryAcquireError)
+			_ = callback(UnecessaryAcquireError)
 			vaultImpl.queueLayer.PopWaitlist(lockTag)
 			// client didn't match, and the lock state is LOCKED, waitlist the
 			// client
 		} else if currentState.lockState == LOCKED {
-			vaultImpl.queueLayer.Waitlist(lockTag, vaultImpl.acquireAction(client, callback))
+			vaultImpl.queueLayer.Waitlist(
+				lockTag, vaultImpl.acquireAction(client, callback),
+			)
 		} else {
+			// This means a write failure occurred and the client that was
+			// acquiring the lock has NW issues or something.
 			if err := callback(nil); err != nil {
 				// don't touch the lock state, pop from waitlist
 				vaultImpl.queueLayer.PopWaitlist(lockTag)
@@ -130,18 +134,18 @@ func (vaultImpl *VaultImpl) releaseAction(client string, callback func(error) er
 		}
 		// if already unlocked, kill the client for not following the protocol
 		if currentState.lockState == UNLOCKED {
-			callback(UnecessaryReleaseError)
+			_ = callback(UnecessaryReleaseError)
 			// else, the lock is in LOCKED state, so check the owner, if
 			// client isn't the owner, it's misbehaving and needs to be killed
 		} else if currentState.client != client {
-			callback(BadMannersError)
+			_ = callback(BadMannersError)
 			// else, client is the owner of the lock, release it and call
 			// callback
 		} else {
 			currentState.client = ""
 			currentState.lockState = UNLOCKED
 			vaultImpl.state[lockTag] = currentState
-			callback(nil)
+			_ = callback(nil)
 			vaultImpl.queueLayer.PopWaitlist(lockTag)
 		}
 	}
@@ -153,7 +157,7 @@ func (vaultImpl *VaultImpl) Synchronized(
 	lockTag string,
 	action func(string),
 ) {
-	logger.Debug("Entering synchronized access block for lock tag", lockTag)
+	logger.Info("Entering synchronized access block for lock tag", lockTag)
 	action(lockTag)
 	logger.Debug("Resulting vault state: \n", vaultImpl.state)
 }

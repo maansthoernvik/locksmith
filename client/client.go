@@ -14,7 +14,10 @@ import (
 
 func main() {
 	conn, err := net.Dial("tcp", "localhost:9000")
-	log.Println("Connected to localhost:9000", err)
+	if err != nil {
+		log.Fatalln("Failed to connect #1:", err)
+	}
+	log.Println("Connected to localhost:9000")
 
 	log.Println("Writing...")
 
@@ -33,6 +36,9 @@ func main() {
 	conn.Write(Acquire())
 
 	conn2, err := net.Dial("tcp", "localhost:9000")
+	if err != nil {
+		log.Fatalln("Failed to connect #2:", err)
+	}
 	conn2.Write(Acquire())
 
 	go func() {
@@ -42,7 +48,7 @@ func main() {
 		log.Println("Connection #2 releasing...")
 		conn2.Write(Release())
 
-		time.Sleep(1)
+		time.Sleep(1 * time.Second)
 
 		conn2.Close()
 	}()

@@ -8,6 +8,8 @@ import (
 	"strconv"
 )
 
+const LOCKSMITH_LOG_LEVEL string = "LOCKSMITH_LOG_LEVEL"
+const LOCKSMITH_LOG_LEVEL_DEFAULT string = "WARNING"
 const LOCKSMITH_PORT string = "LOCKSMITH_PORT"
 const LOCKSMITH_PORT_DEFAULT uint16 = 9000
 

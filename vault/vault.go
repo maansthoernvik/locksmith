@@ -3,8 +3,8 @@ package vault
 import (
 	"errors"
 
+	"github.com/maansthoernvik/locksmith/env"
 	"github.com/maansthoernvik/locksmith/log"
-	"github.com/maansthoernvik/locksmith/protocol"
 	"github.com/maansthoernvik/locksmith/vault/queue"
 )
 
@@ -12,9 +12,16 @@ var BadMannersError = errors.New("Client tried to release lock that it did not o
 var UnecessaryReleaseError = errors.New("Client tried to release a lock that had not been acquired")
 var UnecessaryAcquireError = errors.New("Client tried to acquire a lock that it already had acquired")
 
+var logger *log.Logger
+
+func init() {
+	logLevel, _ := env.GetOptionalString(env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT)
+	logger = log.New(log.Translate(logLevel))
+}
+
 type Vault interface {
-	Acquire(lockTag string, client string, callback func(error))
-	Release(lockTag string, client string, callback func(error))
+	Acquire(lockTag string, client string, callback func(error) error)
+	Release(lockTag string, client string, callback func(error) error)
 }
 
 type lockState bool
@@ -65,50 +72,19 @@ func NewVault(vaultOptions *VaultOptions) Vault {
 func (vaultImpl *VaultImpl) Acquire(
 	lockTag string,
 	client string,
-	callback func(error),
+	callback func(error) error,
 ) {
-	log.GlobalLogger.Debug("Client", client, "acquiring", lockTag)
-	vaultImpl.enqueue(protocol.Acquire, lockTag, client, callback)
+	logger.Debug("Client", client, "acquiring", lockTag)
+	vaultImpl.queueLayer.Enqueue(lockTag, vaultImpl.acquireAction(client, callback))
 }
 
-// Release releases a lock, leading to a queued acquire calling the vault
-// callback.
-func (vaultImpl *VaultImpl) Release(
-	lockTag string,
-	client string,
-	callback func(error),
-) {
-	log.GlobalLogger.Debug("Client", client, "releasing", lockTag)
-	vaultImpl.enqueue(protocol.Release, lockTag, client, callback)
-}
-
-func (vaultImpl *VaultImpl) enqueue(
-	action protocol.ServerMessageType,
-	lockTag string,
-	client string,
-	callback func(error),
-) {
-	log.GlobalLogger.Debug("Calling queue layer")
-	vaultImpl.queueLayer.Enqueue(action, lockTag, client, callback)
-}
-
-// This member function is the only function allowed to touch the vault's lock
-// states. It is called from the queue layer after a dispatch via Enqueue().
-func (vaultImpl *VaultImpl) Synchronized(
-	action protocol.ServerMessageType,
-	lockTag string,
-	client string,
-	callback func(error),
-) {
-	log.GlobalLogger.Debug("Entering synchronized access block for lock tag", lockTag, "on behalf of client", client)
-	currentState, ok := vaultImpl.state[lockTag]
-	if !ok {
-		vaultImpl.state[lockTag] = lockInfo{client: "", lockState: UNLOCKED}
-		currentState = vaultImpl.state[lockTag]
-	}
-
-	switch action {
-	case protocol.Acquire:
+func (vaultImpl *VaultImpl) acquireAction(client string, callback func(error) error) func(lockTag string) {
+	return func(lockTag string) {
+		currentState, ok := vaultImpl.state[lockTag]
+		if !ok {
+			vaultImpl.state[lockTag] = lockInfo{client: "", lockState: UNLOCKED}
+			currentState = vaultImpl.state[lockTag]
+		}
 		// a second acquire is a protocol offense, callback with error and
 		// release the lock, pop waitlisted client.
 		if currentState.client == client {
@@ -120,14 +96,38 @@ func (vaultImpl *VaultImpl) Synchronized(
 			// client didn't match, and the lock state is LOCKED, waitlist the
 			// client
 		} else if currentState.lockState == LOCKED {
-			vaultImpl.queueLayer.Waitlist(lockTag, client, callback)
+			vaultImpl.queueLayer.Waitlist(lockTag, vaultImpl.acquireAction(client, callback))
 		} else {
-			currentState.client = client
-			currentState.lockState = LOCKED
-			vaultImpl.state[lockTag] = currentState
-			callback(nil)
+			if err := callback(nil); err != nil {
+				// don't touch the lock state, pop from waitlist
+				vaultImpl.queueLayer.PopWaitlist(lockTag)
+			} else {
+				currentState.client = client
+				currentState.lockState = LOCKED
+				vaultImpl.state[lockTag] = currentState
+			}
 		}
-	case protocol.Release:
+	}
+}
+
+// Release releases a lock, leading to a queued acquire calling the vault
+// callback.
+func (vaultImpl *VaultImpl) Release(
+	lockTag string,
+	client string,
+	callback func(error) error,
+) {
+	logger.Debug("Client", client, "releasing", lockTag)
+	vaultImpl.queueLayer.Enqueue(lockTag, vaultImpl.releaseAction(client, callback))
+}
+
+func (vaultImpl *VaultImpl) releaseAction(client string, callback func(error) error) func(lockTag string) {
+	return func(lockTag string) {
+		currentState, ok := vaultImpl.state[lockTag]
+		if !ok {
+			vaultImpl.state[lockTag] = lockInfo{client: "", lockState: UNLOCKED}
+			currentState = vaultImpl.state[lockTag]
+		}
 		// if already unlocked, kill the client for not following the protocol
 		if currentState.lockState == UNLOCKED {
 			callback(UnecessaryReleaseError)
@@ -145,5 +145,15 @@ func (vaultImpl *VaultImpl) Synchronized(
 			vaultImpl.queueLayer.PopWaitlist(lockTag)
 		}
 	}
-	log.GlobalLogger.Debug("Resulting vault state: \n", vaultImpl.state)
+}
+
+// This member function is the only function allowed to touch the vault's lock
+// states. It is called from the queue layer after a dispatch via Enqueue().
+func (vaultImpl *VaultImpl) Synchronized(
+	lockTag string,
+	action func(string),
+) {
+	logger.Debug("Entering synchronized access block for lock tag", lockTag)
+	action(lockTag)
+	logger.Debug("Resulting vault state: \n", vaultImpl.state)
 }

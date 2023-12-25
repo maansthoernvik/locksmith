@@ -112,12 +112,12 @@ func (locksmith *Locksmith) handleIncomingMessage(
 func (locksmith *Locksmith) acquireCallback(
 	conn net.Conn,
 	lockTag string,
-) func(error) {
-	return func(err error) {
+) func(error) error {
+	return func(err error) error {
 		if err != nil {
 			log.GlobalLogger.Error("Got error in acquire callback:", err)
 			conn.Close()
-			return
+			return nil
 		}
 
 		log.GlobalLogger.Debug("Notifying client of acquisition for lock tag", lockTag)
@@ -127,17 +127,22 @@ func (locksmith *Locksmith) acquireCallback(
 		}))
 		if writeErr != nil {
 			log.GlobalLogger.Error("Failed to write to client:", writeErr)
+			return writeErr
 		}
+
+		return nil
 	}
 }
 
 func (locksmith *Locksmith) releaseCallback(
 	conn net.Conn,
-) func(error) {
-	return func(err error) {
+) func(error) error {
+	return func(err error) error {
 		if err != nil {
 			log.GlobalLogger.Error("Got error in release callback:", err)
 			conn.Close()
 		}
+
+		return nil
 	}
 }

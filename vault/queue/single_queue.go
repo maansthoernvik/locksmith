@@ -2,25 +2,17 @@ package queue
 
 import (
 	"github.com/maansthoernvik/locksmith/log"
-	"github.com/maansthoernvik/locksmith/protocol"
 )
 
 type SingleQueue struct {
 	queue        chan *queueItem
-	waitlist     map[string][]waitListed
+	waitlist     map[string][]*queueItem
 	synchronized Synchronized
 }
 
-type waitListed struct {
-	client   string
-	callback func(error)
-}
-
 type queueItem struct {
-	action   protocol.ServerMessageType
 	lockTag  string
-	client   string
-	callback func(error)
+	callback func(string)
 }
 
 func NewSingleQueue(
@@ -29,31 +21,31 @@ func NewSingleQueue(
 ) QueueLayer {
 	q := &SingleQueue{
 		queue:        make(chan *queueItem, size),
-		waitlist:     make(map[string][]waitListed),
+		waitlist:     make(map[string][]*queueItem),
 		synchronized: synchronized,
 	}
 	go func() {
 		for {
 			qi := <-q.queue
-			log.GlobalLogger.Debug("Popped queue item, handling lock tag", qi.lockTag, "for client", qi.client)
+			log.GlobalLogger.Debug("Popped queue item")
 			q.handlePop(qi)
 		}
 	}()
 	return q
 }
 
-func (singleQueue *SingleQueue) Enqueue(action protocol.ServerMessageType, lockTag string, client string, callback func(error)) {
-	log.GlobalLogger.Debug("Queueing up client", client, "for lock tag", lockTag)
-	singleQueue.queue <- &queueItem{action: action, lockTag: lockTag, client: client, callback: callback}
+func (singleQueue *SingleQueue) Enqueue(lockTag string, callback func(string)) {
+	log.GlobalLogger.Debug("Queueing up for lock tag:", lockTag)
+	singleQueue.queue <- &queueItem{lockTag: lockTag, callback: callback}
 }
 
-func (singleQueue *SingleQueue) Waitlist(lockTag string, client string, callback func(error)) {
-	log.GlobalLogger.Debug("Waitlisting client", client, "for lock", lockTag)
+func (singleQueue *SingleQueue) Waitlist(lockTag string, callback func(string)) {
+	log.GlobalLogger.Debug("Waitlisting client for lock tag:", lockTag)
 	_, ok := singleQueue.waitlist[lockTag]
 	if !ok {
-		singleQueue.waitlist[lockTag] = []waitListed{{client, callback}}
+		singleQueue.waitlist[lockTag] = []*queueItem{{lockTag, callback}}
 	} else {
-		singleQueue.waitlist[lockTag] = append(singleQueue.waitlist[lockTag], waitListed{client, callback})
+		singleQueue.waitlist[lockTag] = append(singleQueue.waitlist[lockTag], &queueItem{lockTag, callback})
 	}
 	log.GlobalLogger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
 }
@@ -63,12 +55,19 @@ func (singleQueue *SingleQueue) PopWaitlist(lockTag string) {
 	if wl, ok := singleQueue.waitlist[lockTag]; ok && len(wl) > 0 {
 		log.GlobalLogger.Debug("Found waitlist for", lockTag)
 		first := wl[0]
-		singleQueue.waitlist[lockTag] = wl[1:]
-		singleQueue.synchronized.Synchronized(protocol.Acquire, lockTag, first.client, first.callback)
+
+		if len(wl) == 1 {
+			delete(singleQueue.waitlist, lockTag)
+		} else {
+			singleQueue.waitlist[lockTag] = wl[1:]
+		}
+		singleQueue.synchronized.Synchronized(lockTag, first.callback)
+		log.GlobalLogger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
+	} else {
+		log.GlobalLogger.Debug("No waitlisted clients for lock tag:", lockTag)
 	}
-	log.GlobalLogger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
 }
 
 func (singleQueue *SingleQueue) handlePop(qi *queueItem) {
-	singleQueue.synchronized.Synchronized(qi.action, qi.lockTag, qi.client, qi.callback)
+	singleQueue.synchronized.Synchronized(qi.lockTag, qi.callback)
 }

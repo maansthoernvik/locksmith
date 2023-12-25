@@ -50,6 +50,23 @@ func New(logLevel LogLevel) *Logger {
 	return logger
 }
 
+func Translate(logStr string) LogLevel {
+	switch logStr {
+	case "DEBUG":
+		return DEBUG
+	case "INFO":
+		return INFO
+	case "WARNING":
+		return WARNING
+	case "ERROR":
+		return ERROR
+	case "FATAL":
+		return FATAL
+	default:
+		return WARNING
+	}
+}
+
 func (logger *Logger) Debug(args ...any) {
 	// log.Println("Called DEBUG")
 	if logger.logLevel == DEBUG {

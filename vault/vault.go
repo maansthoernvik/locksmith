@@ -8,20 +8,29 @@ import (
 	"github.com/maansthoernvik/locksmith/vault/queue"
 )
 
-var BadMannersError = errors.New("Client tried to release lock that it did not own")
-var UnecessaryReleaseError = errors.New("Client tried to release a lock that had not been acquired")
-var UnecessaryAcquireError = errors.New("Client tried to acquire a lock that it already had acquired")
+var BadMannersError = errors.New(
+	"Client tried to release lock that it did not own",
+)
+var UnecessaryReleaseError = errors.New(
+	"Client tried to release a lock that had not been acquired",
+)
+var UnecessaryAcquireError = errors.New(
+	"Client tried to acquire a lock that it already had acquired",
+)
 
 var logger *log.Logger
 
 func init() {
-	logLevel, _ := env.GetOptionalString(env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT)
+	logLevel, _ := env.GetOptionalString(
+		env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT,
+	)
 	logger = log.New(log.Translate(logLevel))
 }
 
 type Vault interface {
 	Acquire(lockTag string, client string, callback func(error) error)
 	Release(lockTag string, client string, callback func(error) error)
+	Cleanup(client string)
 }
 
 type lockState bool
@@ -37,8 +46,9 @@ type lockInfo struct {
 }
 
 type VaultImpl struct {
-	queueLayer queue.QueueLayer
-	state      map[string]lockInfo
+	queueLayer        queue.QueueLayer
+	state             map[string]lockInfo
+	clientLookUpTable map[string][]string
 }
 
 type QueueType string
@@ -53,7 +63,10 @@ type VaultOptions struct {
 }
 
 func NewVault(vaultOptions *VaultOptions) Vault {
-	vaultImpl := &VaultImpl{state: make(map[string]lockInfo)}
+	vaultImpl := &VaultImpl{
+		state:             make(map[string]lockInfo),
+		clientLookUpTable: make(map[string][]string),
+	}
 	if vaultOptions.QueueType == Single {
 		vaultImpl.queueLayer = queue.NewSingleQueue(300, vaultImpl)
 	} else if vaultOptions.QueueType == Multi {
@@ -75,14 +88,21 @@ func (vaultImpl *VaultImpl) Acquire(
 	callback func(error) error,
 ) {
 	logger.Debug("Client", client, "acquiring", lockTag)
-	vaultImpl.queueLayer.Enqueue(lockTag, vaultImpl.acquireAction(client, callback))
+	vaultImpl.queueLayer.Enqueue(
+		lockTag, vaultImpl.acquireAction(client, callback),
+	)
 }
 
-func (vaultImpl *VaultImpl) acquireAction(client string, callback func(error) error) func(lockTag string) {
+func (vaultImpl *VaultImpl) acquireAction(
+	client string,
+	callback func(error) error,
+) func(lockTag string) {
 	return func(lockTag string) {
 		currentState, ok := vaultImpl.state[lockTag]
 		if !ok {
-			vaultImpl.state[lockTag] = lockInfo{client: "", lockState: UNLOCKED}
+			vaultImpl.state[lockTag] = lockInfo{
+				client: "", lockState: UNLOCKED,
+			}
 			currentState = vaultImpl.state[lockTag]
 		}
 		// a second acquire is a protocol offense, callback with error and
@@ -92,6 +112,17 @@ func (vaultImpl *VaultImpl) acquireAction(client string, callback func(error) er
 			currentState.lockState = UNLOCKED
 			vaultImpl.state[lockTag] = currentState
 			_ = callback(UnecessaryAcquireError)
+
+			if lts, ok := vaultImpl.clientLookUpTable[client]; ok {
+				newLts := make([]string, len(lts)-1)
+				for _, lt := range lts {
+					if lt != lockTag {
+						newLts = append(newLts, lt)
+					}
+				}
+				vaultImpl.clientLookUpTable[client] = newLts
+			}
+
 			vaultImpl.queueLayer.PopWaitlist(lockTag)
 			// client didn't match, and the lock state is LOCKED, waitlist the
 			// client
@@ -109,6 +140,14 @@ func (vaultImpl *VaultImpl) acquireAction(client string, callback func(error) er
 				currentState.client = client
 				currentState.lockState = LOCKED
 				vaultImpl.state[lockTag] = currentState
+				if _, ok := vaultImpl.clientLookUpTable[client]; !ok {
+					vaultImpl.clientLookUpTable[client] = []string{lockTag}
+				} else {
+					vaultImpl.clientLookUpTable[client] = append(
+						vaultImpl.clientLookUpTable[client],
+						lockTag,
+					)
+				}
 			}
 		}
 	}
@@ -125,7 +164,10 @@ func (vaultImpl *VaultImpl) Release(
 	vaultImpl.queueLayer.Enqueue(lockTag, vaultImpl.releaseAction(client, callback))
 }
 
-func (vaultImpl *VaultImpl) releaseAction(client string, callback func(error) error) func(lockTag string) {
+func (vaultImpl *VaultImpl) releaseAction(
+	client string,
+	callback func(error) error,
+) func(lockTag string) {
 	return func(lockTag string) {
 		currentState, ok := vaultImpl.state[lockTag]
 		if !ok {
@@ -146,8 +188,39 @@ func (vaultImpl *VaultImpl) releaseAction(client string, callback func(error) er
 			currentState.lockState = UNLOCKED
 			vaultImpl.state[lockTag] = currentState
 			_ = callback(nil)
+
+			if lts, ok := vaultImpl.clientLookUpTable[client]; ok {
+				newLts := make([]string, len(lts)-1)
+				for _, lt := range lts {
+					if lt != lockTag {
+						newLts = append(newLts, lt)
+					}
+				}
+				vaultImpl.clientLookUpTable[client] = newLts
+			}
+
 			vaultImpl.queueLayer.PopWaitlist(lockTag)
 		}
+	}
+}
+
+func (vaultImpl *VaultImpl) Cleanup(client string) {
+	logger.Info("Cleaning up after client:", client)
+	lockTags := vaultImpl.clientLookUpTable[client]
+
+	for _, lockTag := range lockTags {
+		vaultImpl.queueLayer.Enqueue(
+			lockTag, func(lockTag string) {
+				if currentState, ok := vaultImpl.state[lockTag]; ok &&
+					currentState.client == client {
+					currentState.client = ""
+					currentState.lockState = UNLOCKED
+					vaultImpl.state[lockTag] = currentState
+					vaultImpl.queueLayer.PopWaitlist(lockTag)
+				}
+				delete(vaultImpl.clientLookUpTable, client)
+			},
+		)
 	}
 }
 

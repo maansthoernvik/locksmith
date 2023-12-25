@@ -9,7 +9,7 @@ import (
 
 type TCPAcceptor interface {
 	Start() error
-	Stop()
+	Stop() error
 }
 
 type TCPAcceptorImpl struct {
@@ -44,11 +44,11 @@ func (tcpAcceptor *TCPAcceptorImpl) Start() error {
 	return nil
 }
 
-func (tcpAcceptor *TCPAcceptorImpl) Stop() {
+func (tcpAcceptor *TCPAcceptorImpl) Stop() error {
 	log.GlobalLogger.Info("Stopping TCP acceptor")
 
 	close(tcpAcceptor.stop)
-	tcpAcceptor.listener.Close()
+	return tcpAcceptor.listener.Close()
 }
 
 func (tcpAcceptor *TCPAcceptorImpl) startListener() {
@@ -64,7 +64,10 @@ func (tcpAcceptor *TCPAcceptorImpl) startListener() {
 			}
 		} else {
 			log.GlobalLogger.Debug("Listener accepted a connection")
-			go tcpAcceptor.handler(conn)
+			go func() {
+				defer conn.Close()
+				tcpAcceptor.handler(conn)
+			}()
 		}
 	}
 }

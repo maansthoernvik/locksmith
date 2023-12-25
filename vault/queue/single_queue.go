@@ -69,8 +69,9 @@ func (singleQueue *SingleQueue) PopWaitlist(lockTag string) {
 		} else {
 			singleQueue.waitlist[lockTag] = wl[1:]
 		}
-		singleQueue.synchronized.Synchronized(lockTag, first.callback)
 		logger.Debug("Resulting waitlist state:\n", singleQueue.waitlist)
+
+		singleQueue.synchronized.Synchronized(lockTag, first.callback)
 	} else {
 		logger.Debug("No waitlisted clients for lock tag:", lockTag)
 	}

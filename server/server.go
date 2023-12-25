@@ -63,11 +63,11 @@ func (locksmith *Locksmith) Start(ctx context.Context) error {
 
 	<-ctx.Done()
 	logger.Info("Stopping locksmith")
-	locksmith.tcpAcceptor.Stop()
+	err = locksmith.tcpAcceptor.Stop()
 
 	locksmith.status = STOPPED
 
-	return nil
+	return err
 }
 
 // Incoming connections from the TCP acceptor come here first.
@@ -76,14 +76,16 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 	for {
 		buffer := make([]byte, 257)
 		n, err := conn.Read(buffer)
-		if err == io.EOF {
-			logger.Info("Connection", conn.RemoteAddr().String(),
-				"closed by remote (EOF)")
-			conn.Close()
-			break
-		} else if err != nil {
-			logger.Info("Connection closed:", err)
-			conn.Close()
+		if err != nil {
+			if err == io.EOF {
+				logger.Info("Connection", conn.RemoteAddr().String(),
+					"closed by remote (EOF)")
+			} else {
+				logger.Info("Connection read error:", err)
+			}
+
+			// Connection has been closed, clean up client data
+			locksmith.vault.Cleanup(conn.RemoteAddr().String())
 			break
 		}
 
@@ -95,7 +97,6 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 		if err != nil {
 			logger.Error("Decoding error, closing connection ("+
 				conn.RemoteAddr().String()+"): ", err)
-			conn.Close()
 			break
 		}
 

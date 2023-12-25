@@ -4,12 +4,13 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/maansthoernvik/locksmith/vault/queue"
 )
 
 func Test_AcquireCallback(t *testing.T) {
-	v := &VaultImpl{state: make(map[string]lockInfo)}
+	v := &VaultImpl{state: make(map[string]lockInfo), clientLookUpTable: make(map[string][]string)}
 	v.queueLayer = queue.NewSingleQueue(1, v)
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -23,7 +24,7 @@ func Test_AcquireCallback(t *testing.T) {
 }
 
 func Test_ReleaseCallback(t *testing.T) {
-	v := &VaultImpl{state: make(map[string]lockInfo)}
+	v := &VaultImpl{state: make(map[string]lockInfo), clientLookUpTable: make(map[string][]string)}
 	v.queueLayer = queue.NewSingleQueue(1, v)
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -37,7 +38,7 @@ func Test_ReleaseCallback(t *testing.T) {
 }
 
 func Test_AcquireWaitlist(t *testing.T) {
-	v := &VaultImpl{state: make(map[string]lockInfo)}
+	v := &VaultImpl{state: make(map[string]lockInfo), clientLookUpTable: make(map[string][]string)}
 	v.queueLayer = queue.NewSingleQueue(1, v)
 	wg := sync.WaitGroup{}
 	wg.Add(3)
@@ -63,7 +64,7 @@ func Test_AcquireWaitlist(t *testing.T) {
 }
 
 func Test_ReleaseBadManners(t *testing.T) {
-	v := &VaultImpl{state: make(map[string]lockInfo)}
+	v := &VaultImpl{state: make(map[string]lockInfo), clientLookUpTable: make(map[string][]string)}
 	v.queueLayer = queue.NewSingleQueue(1, v)
 	wg := sync.WaitGroup{}
 	wg.Add(2)
@@ -84,7 +85,7 @@ func Test_ReleaseBadManners(t *testing.T) {
 }
 
 func Test_UnecessaryRelease(t *testing.T) {
-	v := &VaultImpl{state: make(map[string]lockInfo)}
+	v := &VaultImpl{state: make(map[string]lockInfo), clientLookUpTable: make(map[string][]string)}
 	v.queueLayer = queue.NewSingleQueue(1, v)
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -100,7 +101,7 @@ func Test_UnecessaryRelease(t *testing.T) {
 }
 
 func Test_UnecessaryAcquire(t *testing.T) {
-	v := &VaultImpl{state: make(map[string]lockInfo)}
+	v := &VaultImpl{state: make(map[string]lockInfo), clientLookUpTable: make(map[string][]string)}
 	v.queueLayer = queue.NewSingleQueue(1, v)
 	wg := sync.WaitGroup{}
 	wg.Add(2)
@@ -124,7 +125,7 @@ func Test_UnecessaryAcquire(t *testing.T) {
 }
 
 func Test_CallbackError(t *testing.T) {
-	v := &VaultImpl{state: make(map[string]lockInfo)}
+	v := &VaultImpl{state: make(map[string]lockInfo), clientLookUpTable: make(map[string][]string)}
 	v.queueLayer = queue.NewSingleQueue(1, v)
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -150,4 +151,38 @@ func Test_CallbackError(t *testing.T) {
 	})
 
 	wg.Wait()
+}
+
+func Test_Cleanup(t *testing.T) {
+	v := &VaultImpl{state: make(map[string]lockInfo), clientLookUpTable: make(map[string][]string)}
+	v.queueLayer = queue.NewSingleQueue(1, v)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	v.Acquire("lt", "client", func(err error) error {
+		t.Log("Acquire client callback called with error:", err)
+		if err == nil {
+			wg.Done()
+		}
+
+		return nil
+	})
+	wg.Wait()
+
+	li := v.state["lt"]
+	t.Log(li)
+	t.Log(v.clientLookUpTable)
+	if li.client != "client" {
+		t.Error("client does not have acquired lock")
+	}
+
+	v.Cleanup("client")
+
+	for {
+		time.Sleep(50 * time.Millisecond)
+		if v.state["lt"].client == "" {
+			break
+		}
+	}
+	t.Log(li)
+	t.Log(v.clientLookUpTable)
 }

@@ -16,6 +16,7 @@ import (
 // var globalMap = make(map[string]something, 2)
 
 func main() {
+	log.SetFlags(log.Lshortfile)
 	conn, err := net.Dial("tcp", "localhost:9000")
 	if err != nil {
 		log.Fatalln("Failed to connect #1:", err)

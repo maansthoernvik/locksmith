@@ -14,3 +14,8 @@ type QueueLayer interface {
 type Synchronized interface {
 	Synchronized(lockTag string, callback func(lockTag string))
 }
+
+type queueItem struct {
+	lockTag  string
+	callback func(string)
+}

@@ -9,7 +9,7 @@ type LogLevel uint8
 
 // Global logger used for direct calls to Debug, Info, Warning, Error, and Fatal.
 // Defaults to the WARNING log level, call setLogLevel to overwrite.
-var GlobalLogger *Logger = New(WARNING)
+var globalLogger *Logger = New(DEBUG)
 
 const (
 	DEBUG   LogLevel = 0
@@ -68,38 +68,53 @@ func Translate(logStr string) LogLevel {
 }
 
 func (logger *Logger) Debug(args ...any) {
-	// log.Println("Called DEBUG")
 	if logger.logLevel == DEBUG {
 		logger.debug.Println(args...)
 	}
 }
 
 func (logger *Logger) Info(args ...any) {
-	// log.Println("Called INFO")
 	if logger.logLevel <= INFO {
 		logger.info.Println(args...)
 	}
 }
 
 func (logger *Logger) Warning(args ...any) {
-	// log.Println("Called WARNING")
 	if logger.logLevel <= WARNING {
 		logger.warning.Println(args...)
 	}
 }
 
 func (logger *Logger) Error(args ...any) {
-	// log.Println("Called ERROR")
 	if logger.logLevel <= ERROR {
 		logger.err.Println(args...)
 	}
 }
 
 func (logger *Logger) Fatal(args ...any) {
-	// log.Println("Called FATAL")
 	logger.fatal.Fatalln(args...)
 }
 
-// func setLogLevel(logLevel LogLevel) {
-// 	GlobalLogger.logLevel = logLevel
-// }
+func Debug(args ...any) {
+	globalLogger.Debug(args...)
+}
+
+func Info(args ...any) {
+	globalLogger.Info(args...)
+}
+
+func Warning(args ...any) {
+	globalLogger.Warning(args...)
+}
+
+func Error(args ...any) {
+	globalLogger.Error(args...)
+}
+
+func Fatal(args ...any) {
+	globalLogger.Fatal(args...)
+}
+
+func SetLogLevel(logLevel LogLevel) {
+	globalLogger.logLevel = logLevel
+}

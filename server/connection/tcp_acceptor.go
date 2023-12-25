@@ -45,7 +45,7 @@ func (tcpAcceptor *TCPAcceptorImpl) Start() error {
 }
 
 func (tcpAcceptor *TCPAcceptorImpl) Stop() error {
-	log.GlobalLogger.Info("Stopping TCP acceptor")
+	log.Info("Stopping TCP acceptor")
 
 	close(tcpAcceptor.stop)
 	return tcpAcceptor.listener.Close()
@@ -57,13 +57,13 @@ func (tcpAcceptor *TCPAcceptorImpl) startListener() {
 		if err != nil {
 			select {
 			case <-tcpAcceptor.stop:
-				log.GlobalLogger.Info("Stopping accept loop gracefully")
+				log.Info("Stopping accept loop gracefully")
 				return
 			default:
-				log.GlobalLogger.Error(err)
+				log.Error(err)
 			}
 		} else {
-			log.GlobalLogger.Debug("Listener accepted a connection")
+			log.Debug("Listener accepted a connection")
 			go func() {
 				defer conn.Close()
 				tcpAcceptor.handler(conn)

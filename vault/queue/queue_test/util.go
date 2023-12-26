@@ -1,7 +1,6 @@
 package queuetest
 
 import (
-	"log"
 	"math/rand"
 )
 
@@ -13,7 +12,7 @@ const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 func (ts *testSynchronized) Synchronized(lockTag string, callback func(string)) {
 	ts.callCount++
-	log.Println("Synchronized called, call count =", ts.callCount)
+	//log.Println("Synchronized called, call count =", ts.callCount)
 	callback(lockTag)
 }
 

@@ -2,9 +2,12 @@ package queue
 
 import (
 	"testing"
+
+	"github.com/maansthoernvik/locksmith/log"
 )
 
 func Test_queueIndexDistribution(t *testing.T) {
+	log.SetLogLevel(log.WARNING)
 	numQueues := 1000
 	mq := &multiQueue{
 		queues:   make([]chan *queueItem, numQueues),

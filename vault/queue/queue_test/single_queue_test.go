@@ -4,10 +4,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/maansthoernvik/locksmith/log"
 	"github.com/maansthoernvik/locksmith/vault/queue"
 )
 
 func Test_Single_Enqueue(t *testing.T) {
+	log.SetLogLevel(log.WARNING)
 	expectedCallCount := 100
 	ts := &testSynchronized{}
 	q := queue.NewSingleQueue(300, ts)
@@ -15,9 +17,7 @@ func Test_Single_Enqueue(t *testing.T) {
 	wg.Add(expectedCallCount)
 
 	for i := 0; i < expectedCallCount; i++ {
-		t.Log("enqueued", i)
 		q.Enqueue("lt", func(lockTag string) {
-			t.Log("callback called")
 			wg.Done()
 		})
 	}
@@ -30,6 +30,7 @@ func Test_Single_Enqueue(t *testing.T) {
 }
 
 func Test_Single_Waitlist(t *testing.T) {
+	log.SetLogLevel(log.WARNING)
 	expectedCallCount := 10
 	ts := &testSynchronized{}
 	q := queue.NewSingleQueue(20, ts)
@@ -37,9 +38,7 @@ func Test_Single_Waitlist(t *testing.T) {
 	wg.Add(expectedCallCount)
 
 	for i := 0; i < expectedCallCount; i++ {
-		t.Log("waitlisting", i)
 		q.Waitlist("lt", func(lockTag string) {
-			t.Log("callback called")
 			wg.Done()
 		})
 	}
@@ -49,7 +48,6 @@ func Test_Single_Waitlist(t *testing.T) {
 	}
 
 	for i := 0; i < expectedCallCount; i++ {
-		t.Log("popping", i)
 		q.PopWaitlist("lt")
 	}
 

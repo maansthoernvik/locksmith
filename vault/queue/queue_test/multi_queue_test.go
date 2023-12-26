@@ -10,7 +10,7 @@ import (
 func Test_Multi_Enqueue(t *testing.T) {
 	expectedCallCount := 100
 	ts := &testSynchronized{}
-	q := queue.NewMultiQueue(300, ts)
+	q := queue.NewMultiQueue(10, 300, ts)
 	wg := sync.WaitGroup{}
 	wg.Add(expectedCallCount)
 
@@ -32,7 +32,7 @@ func Test_Multi_Enqueue(t *testing.T) {
 func Test_Multi_Waitlist(t *testing.T) {
 	expectedCallCount := 10
 	ts := &testSynchronized{}
-	q := queue.NewMultiQueue(300, ts)
+	q := queue.NewMultiQueue(10, 300, ts)
 	wg := sync.WaitGroup{}
 	wg.Add(expectedCallCount)
 

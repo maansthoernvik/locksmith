@@ -3,33 +3,39 @@ package queue
 import "github.com/maansthoernvik/locksmith/log"
 
 type multiQueue struct {
-	queue        chan *queueItem
+	queues       []chan *queueItem
 	waitlist     map[string][]*queueItem
 	synchronized Synchronized
 }
 
+// Creates a QueueLayer with multiple underlying go routines for quicker
+// dispatch of lock acquisitions and releases. To dispatch, each lock tag
+// is hashed into a number, each queue handles a range.
 func NewMultiQueue(
+	numQueues int,
 	size int,
 	synchronized Synchronized,
 ) QueueLayer {
-	q := &multiQueue{
-		queue:        make(chan *queueItem, size),
+	ql := &multiQueue{
+		queues:       make([]chan *queueItem, numQueues),
 		waitlist:     make(map[string][]*queueItem),
 		synchronized: synchronized,
 	}
-	go func() {
-		for {
-			qi := <-q.queue
-			log.Debug("Popped queue item")
-			q.handlePop(qi)
-		}
-	}()
-	return q
+
+	// Initialize queues, queue[0] is responsible for the range 0 -> 65535 / numQueues and so on
+	for i := 0; i < numQueues; i++ {
+		ql.queues[i] = make(chan *queueItem, size)
+	}
+
+	return ql
 }
 
 func (multiQueue *multiQueue) Enqueue(lockTag string, callback func(string)) {
 	log.Debug("Queueing up for lock tag:", lockTag)
-	multiQueue.queue <- &queueItem{lockTag: lockTag, callback: callback}
+	hash := fnv1aHash(lockTag)
+	queueIndex := multiQueue.queueIndexFromHash(hash)
+	log.Debug("Got hash", hash, "enqueueing with queue", queueIndex)
+	multiQueue.queues[queueIndex] <- &queueItem{lockTag: lockTag, callback: callback}
 }
 
 func (multiQueue *multiQueue) Waitlist(lockTag string, callback func(string)) {
@@ -64,4 +70,12 @@ func (multiQueue *multiQueue) PopWaitlist(lockTag string) {
 
 func (multiQueue *multiQueue) handlePop(qi *queueItem) {
 	multiQueue.synchronized.Synchronized(qi.lockTag, qi.callback)
+}
+
+func (multiQueue *multiQueue) queueIndexFromHash(hash uint16) uint16 {
+	if hash == MAX_HASH {
+		return uint16(len(multiQueue.queues)) - 1
+	}
+
+	return hash / (MAX_HASH / uint16(len(multiQueue.queues)))
 }

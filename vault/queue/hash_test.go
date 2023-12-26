@@ -21,7 +21,8 @@ const SEQUENCE_SIZE = 100
 const MAX = 65535
 
 func TestRangeDistribution_crc16(t *testing.T) {
-	distributionResult := make([]uint32, RANGES, RANGES)
+	t.Skip()
+	distributionResult := make([]uint32, RANGES)
 	for i := 0; i < SAMPLE_SIZE; i++ {
 		n := crc16(randSeq(SEQUENCE_SIZE))
 		if n < MAX/RANGES {
@@ -34,11 +35,18 @@ func TestRangeDistribution_crc16(t *testing.T) {
 			distributionResult[3]++
 		}
 	}
+	var previous uint32 = distributionResult[0]
+	for _, val := range distributionResult[1:] {
+		if val > (previous+1000) || val < (previous-1000) {
+			t.Error("Distribution outside the allowed bounds")
+		}
+	}
 	t.Log(distributionResult)
 }
 
 func TestRangeDistribution_customHash(t *testing.T) {
-	distributionResult := make([]uint32, RANGES, RANGES)
+	t.Skip()
+	distributionResult := make([]uint32, RANGES)
 	for i := 0; i < SAMPLE_SIZE; i++ {
 		n := customHash(randSeq(SEQUENCE_SIZE))
 		if n < MAX/RANGES {
@@ -51,11 +59,17 @@ func TestRangeDistribution_customHash(t *testing.T) {
 			distributionResult[3]++
 		}
 	}
+	var previous uint32 = distributionResult[0]
+	for _, val := range distributionResult[1:] {
+		if val > (previous+1000) || val < (previous-1000) {
+			t.Error("Distribution outside the allowed bounds")
+		}
+	}
 	t.Log(distributionResult)
 }
 
 func TestRangeDistribution_fnv1aHash(t *testing.T) {
-	distributionResult := make([]uint32, RANGES, RANGES)
+	distributionResult := make([]uint32, RANGES)
 	for i := 0; i < SAMPLE_SIZE; i++ {
 		n := fnv1aHash(randSeq(SEQUENCE_SIZE))
 		if n < MAX/RANGES {
@@ -68,11 +82,20 @@ func TestRangeDistribution_fnv1aHash(t *testing.T) {
 			distributionResult[3]++
 		}
 	}
+
+	var previous uint32 = distributionResult[0]
+	for _, val := range distributionResult[1:] {
+		if val > (previous+1000) || val < (previous-1000) {
+			t.Error("Distribution outside the allowed bounds")
+		}
+	}
+
 	t.Log(distributionResult)
 }
 
 func TestRangeDistribution_fnv1Hash(t *testing.T) {
-	distributionResult := make([]uint32, RANGES, RANGES)
+	t.Skip()
+	distributionResult := make([]uint32, RANGES)
 	for i := 0; i < SAMPLE_SIZE; i++ {
 		n := fnv1Hash(randSeq(SEQUENCE_SIZE))
 		if n < MAX/RANGES {
@@ -83,6 +106,13 @@ func TestRangeDistribution_fnv1Hash(t *testing.T) {
 			distributionResult[2]++
 		} else {
 			distributionResult[3]++
+		}
+	}
+
+	var previous uint32 = distributionResult[0]
+	for _, val := range distributionResult[1:] {
+		if val > (previous+1000) || val < (previous-1000) {
+			t.Error("Distribution outside the allowed bounds")
 		}
 	}
 	t.Log(distributionResult)

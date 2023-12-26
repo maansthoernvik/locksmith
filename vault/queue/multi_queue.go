@@ -1,9 +1,12 @@
 package queue
 
-import "github.com/maansthoernvik/locksmith/log"
+import (
+	"github.com/maansthoernvik/locksmith/log"
+)
 
 type multiQueue struct {
 	queues       []chan *queueItem
+	hashFunc     func(string) uint16
 	waitlist     map[string][]*queueItem
 	synchronized Synchronized
 }
@@ -12,19 +15,27 @@ type multiQueue struct {
 // dispatch of lock acquisitions and releases. To dispatch, each lock tag
 // is hashed into a number, each queue handles a range.
 func NewMultiQueue(
-	numQueues int,
-	size int,
+	concurrency int,
+	capacity int,
 	synchronized Synchronized,
 ) QueueLayer {
 	ql := &multiQueue{
-		queues:       make([]chan *queueItem, numQueues),
+		queues:       make([]chan *queueItem, concurrency),
+		hashFunc:     fnv1aHash,
 		waitlist:     make(map[string][]*queueItem),
 		synchronized: synchronized,
 	}
 
 	// Initialize queues, queue[0] is responsible for the range 0 -> 65535 / numQueues and so on
-	for i := 0; i < numQueues; i++ {
-		ql.queues[i] = make(chan *queueItem, size)
+	for i := 0; i < concurrency; i++ {
+		ql.queues[i] = make(chan *queueItem, capacity)
+
+		go func(queue chan *queueItem) {
+			for {
+				qi := <-queue
+				ql.handlePop(qi)
+			}
+		}(ql.queues[i])
 	}
 
 	return ql
@@ -32,7 +43,7 @@ func NewMultiQueue(
 
 func (multiQueue *multiQueue) Enqueue(lockTag string, callback func(string)) {
 	log.Debug("Queueing up for lock tag:", lockTag)
-	hash := fnv1aHash(lockTag)
+	hash := multiQueue.hashFunc(lockTag)
 	queueIndex := multiQueue.queueIndexFromHash(hash)
 	log.Debug("Got hash", hash, "enqueueing with queue", queueIndex)
 	multiQueue.queues[queueIndex] <- &queueItem{lockTag: lockTag, callback: callback}
@@ -73,9 +84,10 @@ func (multiQueue *multiQueue) handlePop(qi *queueItem) {
 }
 
 func (multiQueue *multiQueue) queueIndexFromHash(hash uint16) uint16 {
-	if hash == MAX_HASH {
+	// Since using integer division, anything above 65535 - numQueues will yield an out of bounds index
+	if hash == 65535 {
 		return uint16(len(multiQueue.queues)) - 1
 	}
 
-	return hash / (MAX_HASH / uint16(len(multiQueue.queues)))
+	return uint16(float32(hash) / (float32(MAX_HASH) / float32((len(multiQueue.queues)))))
 }

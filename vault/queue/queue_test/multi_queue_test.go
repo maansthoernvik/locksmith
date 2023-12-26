@@ -15,11 +15,11 @@ func Test_Multi_Enqueue(t *testing.T) {
 	wg.Add(expectedCallCount)
 
 	for i := 0; i < expectedCallCount; i++ {
-		t.Log("enqueued", i)
-		q.Enqueue("lt", func(lockTag string) {
+		q.Enqueue(randSeq(50), func(lockTag string) {
 			t.Log("callback called")
 			wg.Done()
 		})
+		t.Log("enqueued", i)
 	}
 
 	wg.Wait()

@@ -61,7 +61,7 @@ func (multiQueue *multiQueue) Waitlist(lockTag string, callback func(string)) {
 }
 
 func (multiQueue *multiQueue) PopWaitlist(lockTag string) {
-	log.Debug("Popping fom waitlist:", lockTag)
+	log.Debug("Popping from waitlist:", lockTag)
 	if wl, ok := multiQueue.waitlist[lockTag]; ok && len(wl) > 0 {
 		log.Debug("Found waitlist for", lockTag)
 		first := wl[0]
@@ -73,7 +73,7 @@ func (multiQueue *multiQueue) PopWaitlist(lockTag string) {
 		}
 		log.Debug("Resulting waitlist state:\n", multiQueue.waitlist)
 
-		multiQueue.handlePop(first)
+		first.callback(first.lockTag)
 	} else {
 		log.Debug("No waitlisted clients for lock tag:", lockTag)
 	}

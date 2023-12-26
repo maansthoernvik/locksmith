@@ -70,7 +70,7 @@ func NewVault(vaultOptions *VaultOptions) Vault {
 	if vaultOptions.QueueType == Single {
 		vaultImpl.queueLayer = queue.NewSingleQueue(300, vaultImpl)
 	} else if vaultOptions.QueueType == Multi {
-		panic("Multi queue type not implemented")
+		vaultImpl.queueLayer = queue.NewMultiQueue(10, 300, vaultImpl)
 	} else {
 		vaultImpl.queueLayer = queue.NewSingleQueue(300, vaultImpl)
 	}

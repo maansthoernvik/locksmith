@@ -41,7 +41,7 @@ func New(options *LocksmithOptions) *Locksmith {
 	return &Locksmith{
 		options: options,
 		status:  STOPPED,
-		vault:   vault.NewVault(&vault.VaultOptions{QueueType: vault.Single}),
+		vault:   vault.NewVault(&vault.VaultOptions{QueueType: vault.Multi}),
 	}
 }
 

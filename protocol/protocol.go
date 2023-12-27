@@ -15,28 +15,30 @@ const (
 	Release ServerMessageType = 0x1
 )
 
-type ClientMessage byte
+type ClientMessageType byte
 
 const (
-	Acquired ClientMessage = 0x0
+	Acquired ClientMessageType = 0x0
 )
 
 var ServerMessageDecodeError = errors.New("Server message decoding error")
+var ClientMessageDecodeError = errors.New("Client message decoding error")
 var ServerMessageTypeError = errors.New("Server message type not found")
+var ClientMessageTypeError = errors.New("Client message type not found")
 var LockTagSizeError = errors.New("Lock tag size does not match actual lock tag size")
 var LockTagEncodingError = errors.New("Lock tag was not valid UTF8")
 
-type IncomingMessage struct {
-	MessageType ServerMessageType
-	LockTag     string
+type ServerMessage struct {
+	Type    ServerMessageType
+	LockTag string
 }
 
-type OutgoingMessage struct {
-	MessageType ClientMessage
-	LockTag     string
+type ClientMessage struct {
+	Type    ClientMessageType
+	LockTag string
 }
 
-func DecodeServerMessage(bytes []byte) (*IncomingMessage, error) {
+func DecodeServerMessage(bytes []byte) (*ServerMessage, error) {
 	log.Debug("Decoding:", bytes)
 	if len(bytes) < 3 || len(bytes) > 257 {
 		return nil, ServerMessageDecodeError
@@ -55,10 +57,42 @@ func DecodeServerMessage(bytes []byte) (*IncomingMessage, error) {
 		return nil, err
 	}
 
-	return &IncomingMessage{MessageType: messageType, LockTag: lockTag}, nil
+	return &ServerMessage{Type: messageType, LockTag: lockTag}, nil
 }
 
-func EncodeClientMessage(clientMessage *OutgoingMessage) []byte {
+func EncodeServerMessage(serverMessage *ServerMessage) []byte {
+	bytes := make([]byte, 2+len(serverMessage.LockTag))
+	bytes[0] = byte(serverMessage.Type)
+	bytes[1] = byte(len(serverMessage.LockTag))
+	for i := 0; i < len(serverMessage.LockTag); i++ {
+		bytes[i+2] = byte(serverMessage.LockTag[i])
+	}
+	return bytes
+}
+
+func DecodeClientMessage(bytes []byte) (*ClientMessage, error) {
+	log.Debug("Decoding:", bytes)
+	if len(bytes) < 3 || len(bytes) > 257 {
+		return nil, ClientMessageDecodeError
+	}
+	log.Debug("Lock tag:", bytes[2:])
+	log.Debug("Supposed lock tag size:", int(bytes[1]))
+	if len(bytes[2:]) != int(bytes[1]) {
+		return nil, LockTagSizeError
+	}
+	messageType, err := decodeClientMessageType(bytes)
+	if err != nil {
+		return nil, err
+	}
+	lockTag, err := decodeLockTag(bytes, bytes[1])
+	if err != nil {
+		return nil, err
+	}
+
+	return &ClientMessage{Type: messageType, LockTag: lockTag}, nil
+}
+
+func EncodeClientMessage(clientMessage *ClientMessage) []byte {
 	bytes := make([]byte, 2+len(clientMessage.LockTag))
 	log.Debug("Initialized slice with size:", len(bytes))
 	bytes[0] = byte(Acquired)
@@ -82,6 +116,14 @@ func decodeServerMessageType(bytes []byte) (ServerMessageType, error) {
 		return Release, nil
 	}
 	return 0, ServerMessageTypeError
+}
+
+func decodeClientMessageType(bytes []byte) (ClientMessageType, error) {
+	switch bytes[0] {
+	case byte(Acquired):
+		return Acquired, nil
+	}
+	return 0, ClientMessageTypeError
 }
 
 func decodeLockTag(bytes []byte, lockTagSize byte) (string, error) {

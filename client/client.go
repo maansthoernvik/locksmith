@@ -1,87 +1,111 @@
-//go:build !codeanalysis
-// +build !codeanalysis
-
-package main
+package client
 
 import (
-	"log"
+	"fmt"
+	"io"
 	"net"
-	"time"
+
+	"github.com/maansthoernvik/locksmith/log"
+	"github.com/maansthoernvik/locksmith/protocol"
 )
 
-// type something struct {
-// 	someValue string
-// }
+type Client interface {
+	Acquire(lockTag string) error
+	Release(lockTag string) error
+	Start() error
+	Stop()
+}
 
-// var globalMap = make(map[string]something, 2)
+type ClientOptions struct {
+	Host       string
+	Port       uint16
+	OnAcquired func(lockTag string)
+}
 
-func main() {
-	log.SetFlags(log.Lshortfile)
-	conn, err := net.Dial("tcp", "localhost:9000")
-	if err != nil {
-		log.Fatalln("Failed to connect #1:", err)
+type clientImpl struct {
+	host       string
+	port       uint16
+	onAcquired func(lockTag string)
+	conn       net.Conn
+	stop       chan interface{}
+}
+
+func NewClient(options *ClientOptions) Client {
+	return &clientImpl{
+		host:       options.Host,
+		port:       options.Port,
+		onAcquired: options.OnAcquired,
+		stop:       make(chan interface{}),
 	}
-	log.Println("Connected to localhost:9000")
+}
 
-	log.Println("Writing...")
-
-	// log.Println("initial map: \n", globalMap)
-	// globalMap["123"] = something{someValue: "123"}
-	// log.Println("added one field: \n", globalMap)
-	// smthng := &something{someValue: "abc"}
-	// globalMap["abc"] = *smthng
-	// log.Println("added another field: \n", globalMap)
-	// smthng.someValue = "CHANGED!"
-	// log.Println("changed local struct without updating map: \n", globalMap)
-
-	// return
-
-	//nolint
-	conn.Write(Acquire())
-
-	conn2, err := net.Dial("tcp", "localhost:9000")
-	if err != nil {
-		log.Fatalln("Failed to connect #2:", err)
+func (clientImpl *clientImpl) Start() error {
+	conn, dialErr := net.Dial("tcp", fmt.Sprintf("%s:%d", clientImpl.host, clientImpl.port))
+	if dialErr != nil {
+		return dialErr
 	}
-	conn2.Write(Acquire())
+	clientImpl.conn = conn
 
 	go func() {
-		bs := make([]byte, 10)
-		n, _ := conn2.Read(bs)
-		log.Println("Connection #2 got", n, "bytes:", bs)
-		log.Println("Connection #2 releasing...")
-		conn2.Write(Release())
+		for {
+			buffer := make([]byte, 257)
+			n, readErr := conn.Read(buffer)
+			if readErr != nil {
+				if readErr == io.EOF {
+					log.Info("Connection", conn.RemoteAddr().String(),
+						"closed by remote (EOF)")
+				} else {
+					select {
+					case <-clientImpl.stop:
+						log.Info("Stopping client connection gracefully")
+						return
+					default:
+						log.Error("Connection read error:", readErr)
+					}
+				}
 
-		time.Sleep(1 * time.Second)
+				return
+			}
 
-		conn2.Close()
+			clientMessage, decodeErr := protocol.DecodeClientMessage(buffer[:n])
+			if decodeErr != nil {
+				log.Error("Failed to decode message:", decodeErr)
+				continue
+			}
+
+			switch clientMessage.Type {
+			case protocol.Acquired:
+				clientImpl.onAcquired(clientMessage.LockTag)
+			default:
+				log.Error("Client message type not recognized:", clientMessage.Type)
+			}
+		}
 	}()
 
-	// await acquisition notification...
-	bytes := make([]byte, 10)
-	n, err := conn.Read(bytes)
-	if err != nil {
-		log.Fatalln("Failed to read bytes:", err)
-	}
-	log.Println("Connection #1 got", n, "bytes:", bytes)
-
-	//nolint
-	log.Println("Connection #1 releasing...")
-	conn.Write(Release())
-
-	time.Sleep(1 * time.Second)
-
-	conn.Close()
+	return nil
 }
 
-func Acquire() []byte {
-	return []byte{
-		0x0, 0x2, 0x48, 0x48,
-	}
+func (clientImpl *clientImpl) Stop() {
+	close(clientImpl.stop)
+	clientImpl.conn.Close()
 }
 
-func Release() []byte {
-	return []byte{
-		0x1, 0x2, 0x48, 0x48,
-	}
+func (clientImpl *clientImpl) Acquire(lockTag string) error {
+	_, writeErr := clientImpl.conn.Write(
+		protocol.EncodeServerMessage(
+			&protocol.ServerMessage{Type: protocol.Acquire, LockTag: lockTag},
+		),
+	)
+
+	return writeErr
+}
+
+func (clientImpl *clientImpl) Release(lockTag string) error {
+	_, writeErr := clientImpl.conn.Write(
+		protocol.EncodeServerMessage(
+			&protocol.ServerMessage{Type: protocol.Release, LockTag: lockTag},
+		),
+	)
+
+	return writeErr
 }

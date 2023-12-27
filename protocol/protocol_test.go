@@ -6,15 +6,15 @@ import (
 	"testing"
 )
 
-func TestProtocol_decodeMessageType(t *testing.T) {
+func TestProtocol_decodeType(t *testing.T) {
 	messages := [][]byte{
 		{0}, {1},
 	}
 
-	for _, messageType := range messages {
-		messageType, err := decodeServerMessageType(messageType)
+	for _, ty := range messages {
+		_, err := decodeServerMessageType(ty)
 		if err != nil {
-			t.Error("Failed to decode ", messageType)
+			t.Error("Failed to decode ", ty)
 		}
 	}
 }
@@ -88,7 +88,7 @@ func TestProtocol_messedUpMessages(t *testing.T) {
 		if !errors.Is(err, ServerMessageTypeError) {
 			t.Error("Did not get error...")
 		} else {
-			t.Log("Got expected ServerMessageTypeError: ", err)
+			t.Log("Got expected ServerTypeError: ", err)
 		}
 	}
 }
@@ -113,7 +113,7 @@ func TestProtocol_BadLockTagEncoding(t *testing.T) {
 // msg id  lock tag size  lock tag:
 //
 // 1 byte  1 byte         1 byte - 255 bytes
-func TestProtocol_IncomingMessage(t *testing.T) {
+func TestProtocol_ServerMessage(t *testing.T) {
 	// One byte array = 1 message
 	messages := [][]byte{
 		// Acquire
@@ -137,15 +137,15 @@ func TestProtocol_IncomingMessage(t *testing.T) {
 			70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70,
 			70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70},
 	}
-	expected := []*IncomingMessage{
-		{MessageType: Acquire, LockTag: string(messages[0][2:])},
-		{MessageType: Acquire, LockTag: string(messages[1][2:])},
-		{MessageType: Acquire, LockTag: string(messages[2][2:])},
-		{MessageType: Acquire, LockTag: string(messages[3][2:])},
-		{MessageType: Release, LockTag: string(messages[4][2:])},
-		{MessageType: Release, LockTag: string(messages[5][2:])},
-		{MessageType: Release, LockTag: string(messages[6][2:])},
-		{MessageType: Release, LockTag: string(messages[7][2:])},
+	expected := []*ServerMessage{
+		{Type: Acquire, LockTag: string(messages[0][2:])},
+		{Type: Acquire, LockTag: string(messages[1][2:])},
+		{Type: Acquire, LockTag: string(messages[2][2:])},
+		{Type: Acquire, LockTag: string(messages[3][2:])},
+		{Type: Release, LockTag: string(messages[4][2:])},
+		{Type: Release, LockTag: string(messages[5][2:])},
+		{Type: Release, LockTag: string(messages[6][2:])},
+		{Type: Release, LockTag: string(messages[7][2:])},
 	}
 
 	for i, bytes := range messages {
@@ -154,8 +154,8 @@ func TestProtocol_IncomingMessage(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if im.MessageType != expected[i].MessageType {
-				t.Error("MessageType did not match for iteration ", i)
+			if im.Type != expected[i].Type {
+				t.Error("Type did not match for iteration ", i)
 			}
 			if im.LockTag != expected[i].LockTag {
 				t.Error("Lock tag did not match for iteration ", i)
@@ -167,7 +167,7 @@ func TestProtocol_IncomingMessage(t *testing.T) {
 }
 
 func TestProtocol_EncodeClientMessage(t *testing.T) {
-	res := EncodeClientMessage(&OutgoingMessage{MessageType: Acquired, LockTag: "abc"})
+	res := EncodeClientMessage(&ClientMessage{Type: Acquired, LockTag: "abc"})
 
 	t.Log(res)
 }

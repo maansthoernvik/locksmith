@@ -34,14 +34,21 @@ type Locksmith struct {
 }
 
 type LocksmithOptions struct {
-	Port uint16
+	Port             uint16
+	QueueType        vault.QueueType
+	QueueConcurrency int
+	QueueCapacity    int
 }
 
 func New(options *LocksmithOptions) *Locksmith {
 	return &Locksmith{
 		options: options,
 		status:  STOPPED,
-		vault:   vault.NewVault(&vault.VaultOptions{QueueType: vault.Multi}),
+		vault: vault.NewVault(&vault.VaultOptions{
+			QueueType:        options.QueueType,
+			QueueConcurrency: options.QueueConcurrency,
+			QueueCapacity:    options.QueueCapacity,
+		}),
 	}
 }
 

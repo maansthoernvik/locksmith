@@ -30,22 +30,23 @@ func NewMultiQueue(
 	for i := 0; i < concurrency; i++ {
 		ql.queues[i] = make(chan *queueItem, capacity)
 
-		go func(queue chan *queueItem) {
+		go func(i int, queue chan *queueItem) {
+			log.Info("Starting multi queue", i)
 			for {
 				qi := <-queue
 				ql.handlePop(qi)
 			}
-		}(ql.queues[i])
+		}(i, ql.queues[i])
 	}
 
 	return ql
 }
 
 func (multiQueue *multiQueue) Enqueue(lockTag string, callback func(string)) {
-	log.Debug("Queueing up for lock tag:", lockTag)
+	//log.Debug("Queueing up for lock tag:", lockTag)
 	hash := multiQueue.hashFunc(lockTag)
 	queueIndex := multiQueue.queueIndexFromHash(hash)
-	log.Debug("Got hash", hash, "enqueueing with queue", queueIndex)
+	//log.Debug("Got hash", hash, "enqueueing with queue", queueIndex)
 	multiQueue.queues[queueIndex] <- &queueItem{lockTag: lockTag, callback: callback}
 }
 

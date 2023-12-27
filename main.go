@@ -9,9 +9,14 @@ import (
 	"github.com/maansthoernvik/locksmith/env"
 	"github.com/maansthoernvik/locksmith/log"
 	"github.com/maansthoernvik/locksmith/server"
+	"github.com/maansthoernvik/locksmith/vault"
 )
 
 func main() {
+	// Set global log level
+	logLevel, _ := env.GetOptionalString(env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT)
+	log.SetLogLevel(log.Translate(logLevel))
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
@@ -23,7 +28,15 @@ func main() {
 	}()
 
 	port, _ := env.GetOptionalUint16(env.LOCKSMITH_PORT, env.LOCKSMITH_PORT_DEFAULT)
-	if err := server.New(&server.LocksmithOptions{Port: port}).Start(ctx); err != nil {
+	queueType, _ := env.GetOptionalString(env.LOCKSMITH_Q_TYPE, env.LOCKSMITH_Q_TYPE_DEFAULT)
+	concurrency, _ := env.GetOptionalInteger(env.LOCKSMITH_Q_CONCURRENCY, env.LOCKSMITH_Q_CONCURRENCY_DEFAULT)
+	capacity, _ := env.GetOptionalInteger(env.LOCKSMITH_Q_CAPACITY, env.LOCKSMITH_Q_CAPACITY_DEFAULT)
+	if err := server.New(&server.LocksmithOptions{
+		Port:             port,
+		QueueType:        vault.QueueType(queueType),
+		QueueConcurrency: concurrency,
+		QueueCapacity:    capacity,
+	}).Start(ctx); err != nil {
 		log.Error("Server start error: ", err)
 		os.Exit(1)
 	}

@@ -60,19 +60,23 @@ const (
 
 type VaultOptions struct {
 	QueueType
+	QueueConcurrency int
+	QueueCapacity    int
 }
 
-func NewVault(vaultOptions *VaultOptions) Vault {
+func NewVault(options *VaultOptions) Vault {
 	vaultImpl := &VaultImpl{
 		state:             make(map[string]lockInfo),
 		clientLookUpTable: make(map[string][]string),
 	}
-	if vaultOptions.QueueType == Single {
-		vaultImpl.queueLayer = queue.NewSingleQueue(300, vaultImpl)
-	} else if vaultOptions.QueueType == Multi {
-		vaultImpl.queueLayer = queue.NewMultiQueue(10, 300, vaultImpl)
+	if options.QueueType == Single {
+		vaultImpl.queueLayer = queue.NewSingleQueue(
+			options.QueueCapacity, vaultImpl,
+		)
 	} else {
-		vaultImpl.queueLayer = queue.NewSingleQueue(300, vaultImpl)
+		vaultImpl.queueLayer = queue.NewMultiQueue(
+			options.QueueConcurrency, options.QueueCapacity, vaultImpl,
+		)
 	}
 
 	return vaultImpl

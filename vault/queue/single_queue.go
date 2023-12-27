@@ -18,9 +18,10 @@ func NewSingleQueue(
 		synchronized: synchronized,
 	}
 	go func() {
+		log.Info("Started single queue")
 		for {
 			qi := <-q.queue
-			log.Debug("Popped queue item")
+			//log.Debug("Popped queue item")
 			q.handlePop(qi)
 		}
 	}()
@@ -28,7 +29,7 @@ func NewSingleQueue(
 }
 
 func (singleQueue *SingleQueue) Enqueue(lockTag string, callback func(string)) {
-	log.Debug("Queueing up for lock tag:", lockTag)
+	//log.Debug("Queueing up for lock tag:", lockTag)
 	singleQueue.queue <- &queueItem{lockTag: lockTag, callback: callback}
 }
 

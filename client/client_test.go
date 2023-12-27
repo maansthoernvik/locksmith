@@ -101,9 +101,9 @@ func Test_ClientAcquireRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to start client:", startErr)
 	}
-	client.Acquire("123")
+	_ = client.Acquire("123")
 	time.Sleep(1 * time.Millisecond)
-	client.Release("123")
+	_ = client.Release("123")
 
 	wg.Wait()
 
@@ -149,9 +149,12 @@ func Test_ClientOnAcquired(t *testing.T) {
 					t.Log("Acquire received")
 					wg.Done()
 
-					conn.Write(protocol.EncodeClientMessage(
+					_, err := conn.Write(protocol.EncodeClientMessage(
 						&protocol.ClientMessage{Type: protocol.Acquired, LockTag: serverMessage.LockTag},
 					))
+					if err != nil {
+						t.Error("Got error on write:", err)
+					}
 				}
 			}
 		}
@@ -167,7 +170,7 @@ func Test_ClientOnAcquired(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to start client:", startErr)
 	}
-	client.Acquire(EXPECTED_LOCK_TAG)
+	_ = client.Acquire(EXPECTED_LOCK_TAG)
 
 	wg.Wait()
 	client.Stop()

@@ -33,7 +33,7 @@ func Test_MultiQueueTimeTaken(t *testing.T) {
 
 	t.Log("Wait done at", time.Now())
 
-	t.Log("Took", time.Now().Sub(start))
+	t.Log("Took", time.Since(start))
 }
 
 func Test_Multi_Enqueue(t *testing.T) {

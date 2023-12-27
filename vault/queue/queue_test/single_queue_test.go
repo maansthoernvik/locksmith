@@ -33,7 +33,7 @@ func Test_SingleQueueTimeTaken(t *testing.T) {
 
 	t.Log("Wait done at", time.Now())
 
-	t.Log("Took", time.Now().Sub(start))
+	t.Log("Took", time.Since(start))
 }
 
 func Test_Single_Enqueue(t *testing.T) {

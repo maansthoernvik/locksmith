@@ -5,8 +5,16 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/maansthoernvik/locksmith/env"
 	"github.com/maansthoernvik/locksmith/log"
 )
+
+var logger *log.Logger
+
+func init() {
+	val, _ := env.GetOptionalString(env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT)
+	logger = log.New(log.Translate(val))
+}
 
 type ServerMessageType byte
 
@@ -39,12 +47,12 @@ type ClientMessage struct {
 }
 
 func DecodeServerMessage(bytes []byte) (*ServerMessage, error) {
-	log.Debug("Decoding:", bytes)
+	logger.Debug("Decoding:", bytes)
 	if len(bytes) < 3 || len(bytes) > 257 {
 		return nil, ServerMessageDecodeError
 	}
-	log.Debug("Lock tag:", bytes[2:])
-	log.Debug("Supposed lock tag size:", int(bytes[1]))
+	logger.Debug("Lock tag:", bytes[2:])
+	logger.Debug("Supposed lock tag size:", int(bytes[1]))
 	if len(bytes[2:]) != int(bytes[1]) {
 		return nil, LockTagSizeError
 	}
@@ -71,12 +79,12 @@ func EncodeServerMessage(serverMessage *ServerMessage) []byte {
 }
 
 func DecodeClientMessage(bytes []byte) (*ClientMessage, error) {
-	log.Debug("Decoding:", bytes)
+	logger.Debug("Decoding:", bytes)
 	if len(bytes) < 3 || len(bytes) > 257 {
 		return nil, ClientMessageDecodeError
 	}
-	log.Debug("Lock tag:", bytes[2:])
-	log.Debug("Supposed lock tag size:", int(bytes[1]))
+	logger.Debug("Lock tag:", bytes[2:])
+	logger.Debug("Supposed lock tag size:", int(bytes[1]))
 	if len(bytes[2:]) != int(bytes[1]) {
 		return nil, LockTagSizeError
 	}
@@ -94,16 +102,16 @@ func DecodeClientMessage(bytes []byte) (*ClientMessage, error) {
 
 func EncodeClientMessage(clientMessage *ClientMessage) []byte {
 	bytes := make([]byte, 2+len(clientMessage.LockTag))
-	log.Debug("Initialized slice with size:", len(bytes))
+	logger.Debug("Initialized slice with size:", len(bytes))
 	bytes[0] = byte(Acquired)
-	log.Debug("Added Acquired message type:", bytes)
+	logger.Debug("Added Acquired message type:", bytes)
 	bytes[1] = byte(len(clientMessage.LockTag))
-	log.Debug("Added lock tag size:", bytes)
-	log.Debug("Encoding lock tag:", clientMessage.LockTag)
+	logger.Debug("Added lock tag size:", bytes)
+	logger.Debug("Encoding lock tag:", clientMessage.LockTag)
 	for i := 0; i < len(clientMessage.LockTag); i++ {
 		bytes[i+2] = byte(clientMessage.LockTag[i])
 	}
-	log.Debug("Encoded client message:", bytes)
+	logger.Debug("Encoded client message:", bytes)
 
 	return bytes
 }

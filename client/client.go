@@ -5,15 +5,23 @@ import (
 	"io"
 	"net"
 
+	"github.com/maansthoernvik/locksmith/env"
 	"github.com/maansthoernvik/locksmith/log"
 	"github.com/maansthoernvik/locksmith/protocol"
 )
 
+var logger *log.Logger
+
+func init() {
+	val, _ := env.GetOptionalString(env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT)
+	logger = log.New(log.Translate(val))
+}
+
 type Client interface {
 	Acquire(lockTag string) error
 	Release(lockTag string) error
-	Start() error
-	Stop()
+	Connect() error
+	Close()
 }
 
 type ClientOptions struct {
@@ -39,28 +47,30 @@ func NewClient(options *ClientOptions) Client {
 	}
 }
 
-func (clientImpl *clientImpl) Start() error {
+func (clientImpl *clientImpl) Connect() error {
 	conn, dialErr := net.Dial("tcp", fmt.Sprintf("%s:%d", clientImpl.host, clientImpl.port))
 	if dialErr != nil {
 		return dialErr
 	}
 	clientImpl.conn = conn
 
-	go func() {
+	go func(conn net.Conn) {
+		defer conn.Close()
+
 		for {
 			buffer := make([]byte, 257)
 			n, readErr := conn.Read(buffer)
 			if readErr != nil {
 				if readErr == io.EOF {
-					log.Info("Connection", conn.RemoteAddr().String(),
+					logger.Info("Connection", conn.RemoteAddr().String(),
 						"closed by remote (EOF)")
 				} else {
 					select {
 					case <-clientImpl.stop:
-						log.Info("Stopping client connection gracefully")
+						logger.Info("Stopping client connection gracefully")
 						return
 					default:
-						log.Error("Connection read error:", readErr)
+						logger.Error("Connection read error:", readErr)
 					}
 				}
 
@@ -69,7 +79,7 @@ func (clientImpl *clientImpl) Start() error {
 
 			clientMessage, decodeErr := protocol.DecodeClientMessage(buffer[:n])
 			if decodeErr != nil {
-				log.Error("Failed to decode message:", decodeErr)
+				logger.Error("Failed to decode message:", decodeErr)
 				continue
 			}
 
@@ -77,15 +87,15 @@ func (clientImpl *clientImpl) Start() error {
 			case protocol.Acquired:
 				clientImpl.onAcquired(clientMessage.LockTag)
 			default:
-				log.Error("Client message type not recognized:", clientMessage.Type)
+				logger.Error("Client message type not recognized:", clientMessage.Type)
 			}
 		}
-	}()
+	}(conn)
 
 	return nil
 }
 
-func (clientImpl *clientImpl) Stop() {
+func (clientImpl *clientImpl) Close() {
 	close(clientImpl.stop)
 	clientImpl.conn.Close()
 }

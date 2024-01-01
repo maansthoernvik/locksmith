@@ -8,9 +8,17 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/maansthoernvik/locksmith/client"
 )
+
+const USAGE = `Starts a session towards a Locksmith instance using the sample Locksmith
+client implementation.`
+const COMMANDS = `Session started, the following commands are supported:
+
+acquire [lock]
+release [lock]`
 
 var host string
 var port uint
@@ -19,10 +27,17 @@ func main() {
 	flag.StringVar(&host, "host", "localhost", "Locksmith hostname or IP address.")
 	flag.UintVar(&port, "port", 9000, "Locksmith port number.")
 
+	flag.Usage = func() {
+		fmt.Println(USAGE)
+		fmt.Println()
+		flag.CommandLine.PrintDefaults()
+	}
+
 	flag.Parse()
 
 	fmt.Println("Starting Locksmith shell...")
-	c, err := getClient()
+	acquiredChan := make(chan interface{}, 1)
+	c, err := getClient(acquiredChan)
 	if err != nil {
 		fmt.Println("Error creating client:", err)
 		return
@@ -31,12 +46,15 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
+		fmt.Println("Exiting")
 		c.Close()
 		fmt.Println("CLOSED:", fmt.Sprintf("%s:%d", host, port))
 		os.Exit(0)
 	}()
 
 	fmt.Println("CONNECTED:", fmt.Sprintf("%s:%d", host, port))
+	fmt.Println("")
+	fmt.Println(COMMANDS)
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
@@ -53,6 +71,11 @@ func main() {
 		case "exit":
 			sigChan <- syscall.SIGINT
 		case "acquire":
+			if len(cleanedText) != 2 {
+				fmt.Println("> expected 'acquire' followed by a lock")
+				sigChan <- syscall.SIGINT
+				return
+			}
 			lock := cleanedText[1]
 			err := c.Acquire(lock)
 			if err != nil {
@@ -60,7 +83,20 @@ func main() {
 				sigChan <- syscall.SIGINT
 				return
 			}
+			select {
+			case <-time.After(2 * time.Second):
+				fmt.Println("Timed out waiting for acquired signal")
+				sigChan <- syscall.SIGINT
+				return
+			case <-acquiredChan:
+				//noop
+			}
 		case "release":
+			if len(cleanedText) != 2 {
+				fmt.Println("> expected 'release' followed by a lock")
+				sigChan <- syscall.SIGINT
+				return
+			}
 			lock := cleanedText[1]
 			err := c.Release(lock)
 			if err != nil {
@@ -76,11 +112,14 @@ func main() {
 	}
 }
 
-func getClient() (client.Client, error) {
+func getClient(acquiredChan chan interface{}) (client.Client, error) {
 	c := client.NewClient(&client.ClientOptions{
-		Host:       host,
-		Port:       uint16(port),
-		OnAcquired: func(lock string) { fmt.Print("Acquired ", lock, "\n> ") },
+		Host: host,
+		Port: uint16(port),
+		OnAcquired: func(lock string) {
+			fmt.Println("acquired ", lock)
+			acquiredChan <- nil
+		},
 	})
 	if err := c.Connect(); err != nil {
 		return nil, err

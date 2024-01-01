@@ -68,13 +68,12 @@ func (clientImpl *clientImpl) Connect() error {
 					select {
 					case <-clientImpl.stop:
 						logger.Info("Stopping client connection gracefully")
-						return
 					default:
 						logger.Error("Connection read error:", readErr)
 					}
 				}
 
-				return
+				break
 			}
 
 			clientMessage, decodeErr := protocol.DecodeClientMessage(buffer[:n])

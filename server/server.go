@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 
@@ -11,17 +12,8 @@ import (
 	"github.com/maansthoernvik/locksmith/vault"
 )
 
-type LocksmithStatus string
-
-const (
-	STARTED LocksmithStatus = "Started"
-	STOPPED LocksmithStatus = "Stopped"
-)
-
 type Locksmith struct {
 	tcpAcceptor connection.TCPAcceptor
-	status      LocksmithStatus
-	options     *LocksmithOptions
 	vault       vault.Vault
 }
 
@@ -30,41 +22,37 @@ type LocksmithOptions struct {
 	QueueType        vault.QueueType
 	QueueConcurrency int
 	QueueCapacity    int
+	TlsConfig        *tls.Config
 }
 
 func New(options *LocksmithOptions) *Locksmith {
-	return &Locksmith{
-		options: options,
-		status:  STOPPED,
+	locksmith := &Locksmith{
 		vault: vault.NewVault(&vault.VaultOptions{
 			QueueType:        options.QueueType,
 			QueueConcurrency: options.QueueConcurrency,
 			QueueCapacity:    options.QueueCapacity,
 		}),
 	}
+	locksmith.tcpAcceptor = connection.NewTCPAcceptor(&connection.TCPAcceptorOptions{
+		Handler:   locksmith.handleConnection,
+		Port:      options.Port,
+		TlsConfig: options.TlsConfig,
+	})
+
+	return locksmith
 }
 
 func (locksmith *Locksmith) Start(ctx context.Context) error {
-	locksmith.tcpAcceptor = connection.NewTCPAcceptor(
-		&connection.TCPAcceptorOptions{
-			Port:    locksmith.options.Port,
-			Handler: locksmith.handleConnection,
-		},
-	)
 	err := locksmith.tcpAcceptor.Start()
 	if err != nil {
 		log.Error("Failed to start TCP acceptor")
 		return err
 	}
-	log.Info("Started locksmith on port:", locksmith.options.Port)
-
-	locksmith.status = STARTED
+	log.Info("Started locksmith")
 
 	<-ctx.Done()
 	log.Info("Stopping locksmith")
-	err = locksmith.tcpAcceptor.Stop()
-
-	locksmith.status = STOPPED
+	locksmith.tcpAcceptor.Stop()
 
 	return err
 }

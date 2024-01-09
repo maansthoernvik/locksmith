@@ -1,6 +1,7 @@
 package client
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -27,12 +28,14 @@ type Client interface {
 type ClientOptions struct {
 	Host       string
 	Port       uint16
+	TlsConfig  *tls.Config
 	OnAcquired func(lockTag string)
 }
 
 type clientImpl struct {
 	host       string
 	port       uint16
+	tlsConfig  *tls.Config
 	onAcquired func(lockTag string)
 	conn       net.Conn
 	stop       chan interface{}
@@ -42,21 +45,27 @@ func NewClient(options *ClientOptions) Client {
 	return &clientImpl{
 		host:       options.Host,
 		port:       options.Port,
+		tlsConfig:  options.TlsConfig,
 		onAcquired: options.OnAcquired,
 		stop:       make(chan interface{}),
 	}
 }
 
-func (clientImpl *clientImpl) Connect() error {
-	conn, dialErr := net.Dial("tcp", fmt.Sprintf("%s:%d", clientImpl.host, clientImpl.port))
-	if dialErr != nil {
-		return dialErr
+func (clientImpl *clientImpl) Connect() (err error) {
+	if clientImpl.tlsConfig != nil {
+		logger.Info("Dialing (TLS)", clientImpl.host+":"+fmt.Sprint(clientImpl.port))
+		clientImpl.conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", clientImpl.host, clientImpl.port), clientImpl.tlsConfig)
+	} else {
+		logger.Info("Dialing", clientImpl.host+":"+fmt.Sprint(clientImpl.port))
+		clientImpl.conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", clientImpl.host, clientImpl.port))
 	}
-	clientImpl.conn = conn
+	if err != nil {
+		return err
+	}
+	logger.Info("Connected to", clientImpl.conn.RemoteAddr().String())
 
 	go func(conn net.Conn) {
 		defer conn.Close()
-
 		for {
 			buffer := make([]byte, 257)
 			n, readErr := conn.Read(buffer)
@@ -89,7 +98,7 @@ func (clientImpl *clientImpl) Connect() error {
 				logger.Error("Client message type not recognized:", clientMessage.Type)
 			}
 		}
-	}(conn)
+	}(clientImpl.conn)
 
 	return nil
 }

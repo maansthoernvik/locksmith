@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 
@@ -9,65 +10,73 @@ import (
 
 type TCPAcceptor interface {
 	Start() error
-	Stop() error
-}
-
-type TCPAcceptorImpl struct {
-	port     uint16
-	handler  func(net.Conn)
-	listener net.Listener
-	stop     chan interface{}
+	Stop()
 }
 
 type TCPAcceptorOptions struct {
-	Handler func(net.Conn)
-	Port    uint16
+	Handler   func(net.Conn)
+	Port      uint16
+	TlsConfig *tls.Config
+}
+
+type tcpAcceptorImpl struct {
+	port      uint16
+	handler   func(net.Conn)
+	tlsConfig *tls.Config
+	listener  net.Listener
+	stop      chan interface{}
 }
 
 func NewTCPAcceptor(options *TCPAcceptorOptions) TCPAcceptor {
-	return &TCPAcceptorImpl{
-		port:    options.Port,
-		handler: options.Handler,
-		stop:    make(chan interface{}),
+	return &tcpAcceptorImpl{
+		port:      options.Port,
+		handler:   options.Handler,
+		tlsConfig: options.TlsConfig,
+		stop:      make(chan interface{}),
 	}
 }
 
-func (tcpAcceptor *TCPAcceptorImpl) Start() error {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", tcpAcceptor.port))
+func (tcpAcceptor *tcpAcceptorImpl) Start() (err error) {
+	if tcpAcceptor.tlsConfig == nil {
+		tcpAcceptor.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", tcpAcceptor.port))
+		log.Info("Starting listener on port", tcpAcceptor.port)
+	} else {
+		tcpAcceptor.listener, err = tls.Listen("tcp", fmt.Sprintf(":%d", tcpAcceptor.port), tcpAcceptor.tlsConfig)
+		log.Info("Starting TLS listener on port", tcpAcceptor.port)
+	}
 	if err != nil {
 		return err
 	}
 
-	tcpAcceptor.listener = listener
 	go tcpAcceptor.startListener()
 
 	return nil
 }
 
-func (tcpAcceptor *TCPAcceptorImpl) Stop() error {
+func (tcpAcceptor *tcpAcceptorImpl) Stop() {
 	log.Info("Stopping TCP acceptor")
-
 	close(tcpAcceptor.stop)
-	return tcpAcceptor.listener.Close()
+	tcpAcceptor.listener.Close()
 }
 
-func (tcpAcceptor *TCPAcceptorImpl) startListener() {
+func (tcpAcceptor *tcpAcceptorImpl) startListener() {
+	defer tcpAcceptor.listener.Close()
 	for {
 		conn, err := tcpAcceptor.listener.Accept()
 		if err != nil {
 			select {
 			case <-tcpAcceptor.stop:
 				log.Info("Stopping accept loop gracefully")
-				return
 			default:
 				log.Error(err)
 			}
-		} else {
-			log.Debug("Listener accepted a connection")
-			go func() {
-				defer conn.Close()
-				tcpAcceptor.handler(conn)
-			}()
+			break
 		}
+		log.Debug("Listener accepted connection:", conn.RemoteAddr().String())
+
+		go func() {
+			defer conn.Close()
+			tcpAcceptor.handler(conn)
+		}()
 	}
 }

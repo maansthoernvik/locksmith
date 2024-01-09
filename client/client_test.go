@@ -1,8 +1,11 @@
 package client
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -175,4 +178,118 @@ func Test_ClientOnAcquired(t *testing.T) {
 	wg.Wait()
 	client.Close()
 	listener.Close()
+}
+
+func Test_MutualTls(t *testing.T) {
+	cert, err := tls.LoadX509KeyPair("testcerts/testCert.pem", "testcerts/testKey.pem")
+	if err != nil {
+		t.Error("Error when loading cert and key pair", err)
+	}
+
+	clientCaCert, err := os.ReadFile("testcerts/rootCACert.pem")
+	if err != nil {
+		t.Error("Failed to read client CA cert:", err)
+	}
+
+	pool := x509.NewCertPool()
+	pool.AppendCertsFromPEM(clientCaCert)
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    pool,
+		MinVersion:   tls.VersionTLS13,
+	}
+
+	t.Log("Creating listener")
+	listener, err := tls.Listen("tcp", "localhost:30000", tlsConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Lifecycle wait group for client/listener tests.
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+
+	shutdownWg := sync.WaitGroup{}
+	shutdownWg.Add(1)
+	go func() {
+		for {
+			t.Log("Waiting for connections...")
+			conn, err := listener.Accept()
+			if err != nil {
+				t.Log("Listener error:", err)
+				break
+			}
+
+			t.Log("Accepted connection from", conn.RemoteAddr().String())
+			go func(conn net.Conn) {
+				defer conn.Close()
+				for {
+					_, err := conn.Read(make([]byte, 25))
+					t.Log("Got bytes from client...")
+					if err != nil {
+						t.Error("Error reading:", err)
+						wg.Done()
+						break
+					}
+
+					//nolint
+					conn.Write(protocol.EncodeClientMessage(
+						&protocol.ClientMessage{
+							Type:    protocol.Acquired,
+							LockTag: "abc",
+						},
+					))
+
+					wg.Done()
+					break // nolint
+				}
+			}(conn)
+		}
+
+		shutdownWg.Done()
+	}()
+
+	clientCert, err := tls.LoadX509KeyPair("testcerts/testCert.pem", "testcerts/testKey.pem")
+	if err != nil {
+		t.Error(err)
+	}
+
+	t.Log("Creating client")
+	c := &clientImpl{
+		host: "localhost",
+		port: 30000,
+		onAcquired: func(lockTag string) {
+			t.Log("Client got acquired signal for lock tag:", lockTag)
+			wg.Done()
+		},
+		tlsConfig: &tls.Config{
+			Certificates: []tls.Certificate{clientCert},
+			RootCAs:      pool,
+			MinVersion:   tls.VersionTLS13,
+		},
+		stop: make(chan interface{}),
+	}
+	t.Log("Connecting client")
+	err = c.Connect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log("Client connected")
+
+	writeErr := c.Acquire("abc")
+	if writeErr != nil {
+		t.Error("Got unexpected write error:", writeErr)
+	}
+
+	t.Log("waiting on listener read")
+	wg.Wait()
+	t.Log("done waiting on listener read")
+
+	t.Log("Shutting down listener and client...")
+	listener.Close()
+	c.Close()
+
+	t.Log("waiting for listener to exit accept loop")
+	shutdownWg.Wait()
 }

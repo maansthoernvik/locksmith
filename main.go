@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"os"
 	"os/signal"
 	"syscall"
@@ -36,10 +38,38 @@ func main() {
 		QueueType:        vault.QueueType(queueType),
 		QueueConcurrency: concurrency,
 		QueueCapacity:    capacity,
+		TlsConfig:        getTlsConfig(),
 	}).Start(ctx); err != nil {
 		log.Error("Server start error: ", err)
 		os.Exit(1)
 	}
 
 	log.Info("Server stopped")
+}
+
+func getTlsConfig() *tls.Config {
+	tlsConfig := &tls.Config{}
+
+	serverCertPath, _ := env.GetOptionalString(env.LOCKSMITH_TLS_CERT_PATH, env.LOCKSMITH_TLS_CERT_PATH_DEFAULT)
+	serverKeyPath, _ := env.GetOptionalString(env.LOCKSMITH_TLS_KEY_PATH, env.LOCKSMITH_TLS_KEY_PATH_DEFAULT)
+	cert, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
+	if err != nil {
+		panic("Failed to load server cert/key pair")
+	}
+	tlsConfig.Certificates = []tls.Certificate{cert}
+
+	requireClientVerify, _ := env.GetOptionalBool(env.LOCKSMITH_TLS_REQUIRE_CLIENT_CERT, env.LOCKSMITH_TLS_REQUIRE_CLIENT_CERT_DEFAULT)
+	if requireClientVerify {
+		clientCaCertPath, _ := env.GetOptionalString(env.LOCKSMITH_TLS_CLIENT_CA_CERT_PATH, env.LOCKSMITH_TLS_CLIENT_CA_CERT_PATH_DEFAULT)
+		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		caCert, err := os.ReadFile(clientCaCertPath)
+		if err != nil {
+			panic("Failed to read client CA cert file")
+		}
+		pool := x509.NewCertPool()
+		pool.AppendCertsFromPEM(caCert)
+		tlsConfig.ClientCAs = pool
+	}
+
+	return &tls.Config{}
 }

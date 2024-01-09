@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 func TestServer_Stop(t *testing.T) {
@@ -11,12 +10,6 @@ func TestServer_Stop(t *testing.T) {
 	locksmith := New(&LocksmithOptions{Port: 30001})
 
 	go func() {
-		for {
-			if locksmith.status == STARTED {
-				break
-			}
-			time.Sleep(200 * time.Millisecond)
-		}
 		cancel()
 	}()
 

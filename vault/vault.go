@@ -91,7 +91,7 @@ func (vaultImpl *VaultImpl) Acquire(
 	client string,
 	callback func(error) error,
 ) {
-	logger.Info("Client", client, "acquiring", lockTag)
+	logger.Info("Client ", client, " acquiring ", lockTag)
 	vaultImpl.queueLayer.Enqueue(
 		lockTag, vaultImpl.acquireAction(client, callback),
 	)
@@ -164,7 +164,7 @@ func (vaultImpl *VaultImpl) Release(
 	client string,
 	callback func(error) error,
 ) {
-	logger.Info("Client", client, "releasing", lockTag)
+	logger.Info("Client ", client, " releasing ", lockTag)
 	vaultImpl.queueLayer.Enqueue(lockTag, vaultImpl.releaseAction(client, callback))
 }
 
@@ -209,7 +209,7 @@ func (vaultImpl *VaultImpl) releaseAction(
 }
 
 func (vaultImpl *VaultImpl) Cleanup(client string) {
-	logger.Info("Cleaning up after client:", client)
+	logger.Info("Cleaning up after client: ", client)
 	lockTags := vaultImpl.clientLookUpTable[client]
 
 	for _, lockTag := range lockTags {
@@ -234,7 +234,7 @@ func (vaultImpl *VaultImpl) Synchronized(
 	lockTag string,
 	action func(string),
 ) {
-	logger.Debug("Entering synchronized access block for lock tag", lockTag)
+	logger.Debug("Entering synchronized access block for lock tag ", lockTag)
 	action(lockTag)
 	logger.Debug("Resulting vault state: \n", vaultImpl.state)
 }

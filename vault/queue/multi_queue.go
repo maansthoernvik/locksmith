@@ -31,7 +31,7 @@ func NewMultiQueue(
 		ql.queues[i] = make(chan *queueItem, capacity)
 
 		go func(i int, queue chan *queueItem) {
-			log.Info("Starting multi queue", i)
+			log.Info("Starting multi queue ", i)
 			for {
 				qi := <-queue
 				ql.handlePop(qi)

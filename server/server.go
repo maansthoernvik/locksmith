@@ -59,16 +59,16 @@ func (locksmith *Locksmith) Start(ctx context.Context) error {
 
 // Incoming connections from the TCP acceptor come here first.
 func (locksmith *Locksmith) handleConnection(conn net.Conn) {
-	log.Info("Connection accepted from:", conn.RemoteAddr().String())
+	log.Info("Connection accepted from: ", conn.RemoteAddr().String())
 	for {
 		buffer := make([]byte, 257)
 		n, err := conn.Read(buffer)
 		if err != nil {
 			if err == io.EOF {
-				log.Info("Connection", conn.RemoteAddr().String(),
-					"closed by remote (EOF)")
+				log.Info("Connection ", conn.RemoteAddr().String(),
+					" closed by remote (EOF)")
 			} else {
-				log.Error("Connection read error:", err)
+				log.Error("Connection read error: ", err)
 			}
 
 			// Connection has been closed, clean up client data
@@ -76,9 +76,9 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 			break
 		}
 
-		log.Debug("Got message (", n, "chars)")
-		log.Debug("Buffer contains:", buffer)
-		log.Debug("Interesting part of the buffer:", buffer[:n])
+		log.Debug("Got message (", n, " chars)")
+		log.Debug("Buffer contains: ", buffer)
+		log.Debug("Interesting part of the buffer: ", buffer[:n])
 
 		incomingMessage, err := protocol.DecodeServerMessage(buffer[:n])
 		if err != nil {
@@ -111,18 +111,18 @@ func (locksmith *Locksmith) acquireCallback(
 ) func(error) error {
 	return func(err error) error {
 		if err != nil {
-			log.Error("Got error in acquire callback:", err)
+			log.Error("Got error in acquire callback: ", err)
 			conn.Close()
 			return nil
 		}
 
-		log.Debug("Notifying client of acquisition for lock tag", lockTag)
+		log.Debug("Notifying client of acquisition for lock tag ", lockTag)
 		_, writeErr := conn.Write(protocol.EncodeClientMessage(&protocol.ClientMessage{
 			Type:    protocol.Acquired,
 			LockTag: lockTag,
 		}))
 		if writeErr != nil {
-			log.Error("Failed to write to client:", writeErr)
+			log.Error("Failed to write to client: ", writeErr)
 			return writeErr
 		}
 
@@ -135,7 +135,7 @@ func (locksmith *Locksmith) releaseCallback(
 ) func(error) error {
 	return func(err error) error {
 		if err != nil {
-			log.Error("Got error in release callback:", err)
+			log.Error("Got error in release callback: ", err)
 			conn.Close()
 		}
 

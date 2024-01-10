@@ -33,13 +33,17 @@ func main() {
 	queueType, _ := env.GetOptionalString(env.LOCKSMITH_Q_TYPE, env.LOCKSMITH_Q_TYPE_DEFAULT)
 	concurrency, _ := env.GetOptionalInteger(env.LOCKSMITH_Q_CONCURRENCY, env.LOCKSMITH_Q_CONCURRENCY_DEFAULT)
 	capacity, _ := env.GetOptionalInteger(env.LOCKSMITH_Q_CAPACITY, env.LOCKSMITH_Q_CAPACITY_DEFAULT)
-	if err := server.New(&server.LocksmithOptions{
+
+	locksmithOptions := &server.LocksmithOptions{
 		Port:             port,
 		QueueType:        vault.QueueType(queueType),
 		QueueConcurrency: concurrency,
 		QueueCapacity:    capacity,
-		TlsConfig:        getTlsConfig(),
-	}).Start(ctx); err != nil {
+	}
+	if tls, _ := env.GetOptionalBool(env.LOCKSMITH_TLS, env.LOCKSMITH_TLS_DEFAULT); tls {
+		locksmithOptions.TlsConfig = getTlsConfig()
+	}
+	if err := server.New(locksmithOptions).Start(ctx); err != nil {
 		log.Error("Server start error: ", err)
 		os.Exit(1)
 	}

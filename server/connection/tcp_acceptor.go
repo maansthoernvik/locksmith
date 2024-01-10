@@ -39,10 +39,10 @@ func NewTCPAcceptor(options *TCPAcceptorOptions) TCPAcceptor {
 func (tcpAcceptor *tcpAcceptorImpl) Start() (err error) {
 	if tcpAcceptor.tlsConfig == nil {
 		tcpAcceptor.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", tcpAcceptor.port))
-		log.Info("Starting listener on port", tcpAcceptor.port)
+		log.Info("Starting listener on port ", tcpAcceptor.port)
 	} else {
 		tcpAcceptor.listener, err = tls.Listen("tcp", fmt.Sprintf(":%d", tcpAcceptor.port), tcpAcceptor.tlsConfig)
-		log.Info("Starting TLS listener on port", tcpAcceptor.port)
+		log.Info("Starting TLS listener on port ", tcpAcceptor.port)
 	}
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func (tcpAcceptor *tcpAcceptorImpl) startListener() {
 			}
 			break
 		}
-		log.Debug("Listener accepted connection:", conn.RemoteAddr().String())
+		log.Debug("Listener accepted connection: ", conn.RemoteAddr().String())
 
 		go func() {
 			defer conn.Close()

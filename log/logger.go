@@ -1,6 +1,7 @@
 package log
 
 import (
+	"fmt"
 	"log"
 	"os"
 )
@@ -8,8 +9,11 @@ import (
 type LogLevel uint8
 
 // Global logger used for direct calls to Debug, Info, Warning, Error, and Fatal.
-// Defaults to the WARNING log level, call setLogLevel to overwrite.
+// Defaults to the DEBUG log level, call SetLogLevel to overwrite.
 var globalLogger *Logger = New(DEBUG)
+
+// Calldepth to capture callers rather than logger.go
+var calldepth = 3
 
 const (
 	DEBUG   LogLevel = 0
@@ -67,32 +71,34 @@ func Translate(logStr string) LogLevel {
 	}
 }
 
+// TODO: use Output instead of Println/Fatalf etc... it has a configurable calldepth
 func (logger *Logger) Debug(args ...any) {
 	if logger.logLevel == DEBUG {
-		logger.debug.Println(args...)
+		_ = logger.debug.Output(calldepth, fmt.Sprint(args...))
 	}
 }
 
 func (logger *Logger) Info(args ...any) {
 	if logger.logLevel <= INFO {
-		logger.info.Println(args...)
+		_ = logger.info.Output(calldepth, fmt.Sprint(args...))
 	}
 }
 
 func (logger *Logger) Warning(args ...any) {
 	if logger.logLevel <= WARNING {
-		logger.warning.Println(args...)
+		_ = logger.warning.Output(calldepth, fmt.Sprint(args...))
 	}
 }
 
 func (logger *Logger) Error(args ...any) {
 	if logger.logLevel <= ERROR {
-		logger.err.Println(args...)
+		_ = logger.err.Output(calldepth, fmt.Sprint(args...))
 	}
 }
 
 func (logger *Logger) Fatal(args ...any) {
-	logger.fatal.Fatalln(args...)
+	_ = logger.fatal.Output(calldepth, fmt.Sprint(args...))
+	os.Exit(1)
 }
 
 func Debug(args ...any) {

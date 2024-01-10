@@ -34,7 +34,7 @@ func (singleQueue *SingleQueue) Enqueue(lockTag string, callback func(string)) {
 }
 
 func (singleQueue *SingleQueue) Waitlist(lockTag string, callback func(string)) {
-	log.Debug("Waitlisting client for lock tag:", lockTag)
+	log.Debug("Waitlisting client for lock tag: ", lockTag)
 	_, ok := singleQueue.waitlist[lockTag]
 	if !ok {
 		singleQueue.waitlist[lockTag] = []*queueItem{{lockTag, callback}}
@@ -45,9 +45,9 @@ func (singleQueue *SingleQueue) Waitlist(lockTag string, callback func(string)) 
 }
 
 func (singleQueue *SingleQueue) PopWaitlist(lockTag string) {
-	log.Debug("Popping fom waitlist:", lockTag)
+	log.Debug("Popping fom waitlist: ", lockTag)
 	if wl, ok := singleQueue.waitlist[lockTag]; ok && len(wl) > 0 {
-		log.Debug("Found waitlist for", lockTag)
+		log.Debug("Found waitlist for ", lockTag)
 		first := wl[0]
 
 		if len(wl) == 1 {
@@ -59,7 +59,7 @@ func (singleQueue *SingleQueue) PopWaitlist(lockTag string) {
 
 		singleQueue.handlePop(first)
 	} else {
-		log.Debug("No waitlisted clients for lock tag:", lockTag)
+		log.Debug("No waitlisted clients for lock tag: ", lockTag)
 	}
 }
 

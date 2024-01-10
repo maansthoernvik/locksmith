@@ -53,16 +53,16 @@ func NewClient(options *ClientOptions) Client {
 
 func (clientImpl *clientImpl) Connect() (err error) {
 	if clientImpl.tlsConfig != nil {
-		logger.Info("Dialing (TLS)", clientImpl.host+":"+fmt.Sprint(clientImpl.port))
+		logger.Info("Dialing (TLS) ", clientImpl.host+":"+fmt.Sprint(clientImpl.port))
 		clientImpl.conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", clientImpl.host, clientImpl.port), clientImpl.tlsConfig)
 	} else {
-		logger.Info("Dialing", clientImpl.host+":"+fmt.Sprint(clientImpl.port))
+		logger.Info("Dialing ", clientImpl.host+":"+fmt.Sprint(clientImpl.port))
 		clientImpl.conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", clientImpl.host, clientImpl.port))
 	}
 	if err != nil {
 		return err
 	}
-	logger.Info("Connected to", clientImpl.conn.RemoteAddr().String())
+	logger.Info("Connected to ", clientImpl.conn.RemoteAddr().String())
 
 	go func(conn net.Conn) {
 		defer conn.Close()
@@ -71,14 +71,14 @@ func (clientImpl *clientImpl) Connect() (err error) {
 			n, readErr := conn.Read(buffer)
 			if readErr != nil {
 				if readErr == io.EOF {
-					logger.Info("Connection", conn.RemoteAddr().String(),
-						"closed by remote (EOF)")
+					logger.Info("Connection ", conn.RemoteAddr().String(),
+						" closed by remote (EOF)")
 				} else {
 					select {
 					case <-clientImpl.stop:
 						logger.Info("Stopping client connection gracefully")
 					default:
-						logger.Error("Connection read error:", readErr)
+						logger.Error("Connection read error: ", readErr)
 					}
 				}
 
@@ -87,7 +87,7 @@ func (clientImpl *clientImpl) Connect() (err error) {
 
 			clientMessage, decodeErr := protocol.DecodeClientMessage(buffer[:n])
 			if decodeErr != nil {
-				logger.Error("Failed to decode message:", decodeErr)
+				logger.Error("Failed to decode message: ", decodeErr)
 				continue
 			}
 
@@ -95,7 +95,7 @@ func (clientImpl *clientImpl) Connect() (err error) {
 			case protocol.Acquired:
 				clientImpl.onAcquired(clientMessage.LockTag)
 			default:
-				logger.Error("Client message type not recognized:", clientMessage.Type)
+				logger.Error("Client message type not recognized: ", clientMessage.Type)
 			}
 		}
 	}(clientImpl.conn)

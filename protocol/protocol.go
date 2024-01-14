@@ -11,14 +11,14 @@ import (
 type ServerMessageType byte
 
 const (
-	Acquire ServerMessageType = 0x0
-	Release ServerMessageType = 0x1
+	Acquire ServerMessageType = 0
+	Release ServerMessageType = 1
 )
 
 type ClientMessageType byte
 
 const (
-	Acquired ClientMessageType = 0x0
+	Acquired ClientMessageType = 0
 )
 
 var ServerMessageDecodeError = errors.New("Server message decoding error")
@@ -52,7 +52,7 @@ func DecodeServerMessage(bytes []byte) (*ServerMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	lockTag, err := decodeLockTag(bytes, bytes[1])
+	lockTag, err := decodeLockTag(bytes)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func DecodeClientMessage(bytes []byte) (*ClientMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	lockTag, err := decodeLockTag(bytes, bytes[1])
+	lockTag, err := decodeLockTag(bytes)
 	if err != nil {
 		return nil, err
 	}
@@ -103,30 +103,30 @@ func EncodeClientMessage(clientMessage *ClientMessage) []byte {
 	for i := 0; i < len(clientMessage.LockTag); i++ {
 		bytes[i+2] = byte(clientMessage.LockTag[i])
 	}
-	log.Debug("Encoded client message: ", bytes)
+	log.Debug("Encoded client message:", bytes)
 
 	return bytes
 }
 
 func decodeServerMessageType(bytes []byte) (ServerMessageType, error) {
-	switch bytes[0] {
-	case byte(Acquire):
+	switch ServerMessageType(bytes[0]) {
+	case Acquire:
 		return Acquire, nil
-	case byte(Release):
+	case Release:
 		return Release, nil
 	}
 	return 0, ServerMessageTypeError
 }
 
 func decodeClientMessageType(bytes []byte) (ClientMessageType, error) {
-	switch bytes[0] {
-	case byte(Acquired):
+	switch ClientMessageType(bytes[0]) {
+	case Acquired:
 		return Acquired, nil
 	}
 	return 0, ClientMessageTypeError
 }
 
-func decodeLockTag(bytes []byte, lockTagSize byte) (string, error) {
+func decodeLockTag(bytes []byte) (string, error) {
 	lockTag := bytes[2:]
 	if !utf8.Valid(lockTag) {
 		return "", LockTagEncodingError

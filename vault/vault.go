@@ -2,8 +2,8 @@ package vault
 
 import (
 	"errors"
+	"fmt"
 
-	"github.com/maansthoernvik/locksmith/env"
 	"github.com/maansthoernvik/locksmith/log"
 	"github.com/maansthoernvik/locksmith/vault/queue"
 )
@@ -17,15 +17,6 @@ var UnecessaryReleaseError = errors.New(
 var UnecessaryAcquireError = errors.New(
 	"Client tried to acquire a lock that it already had acquired",
 )
-
-var logger *log.Logger
-
-func init() {
-	logLevel, _ := env.GetOptionalString(
-		env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT,
-	)
-	logger = log.New(log.Translate(logLevel))
-}
 
 type Vault interface {
 	Acquire(lockTag string, client string, callback func(error) error)
@@ -45,9 +36,35 @@ type lockInfo struct {
 	lockState
 }
 
-type VaultImpl struct {
+func newLockInfo() *lockInfo {
+	return &lockInfo{client: "", lockState: UNLOCKED}
+}
+
+func (li *lockInfo) isOwner(client string) bool {
+	return li.client == client
+}
+
+func (li *lockInfo) isLocked() bool {
+	return li.lockState == LOCKED
+}
+
+func (li *lockInfo) unlock() {
+	li.lockState = UNLOCKED
+	li.client = ""
+}
+
+func (li *lockInfo) lock(client string) {
+	li.lockState = LOCKED
+	li.client = client
+}
+
+func (li *lockInfo) String() string {
+	return fmt.Sprintf("&lockInfo{c: %s, s: %v}", li.client, li.lockState)
+}
+
+type vaultImpl struct {
 	queueLayer        queue.QueueLayer
-	state             map[string]lockInfo
+	state             map[string]*lockInfo
 	clientLookUpTable map[string][]string
 }
 
@@ -65,93 +82,66 @@ type VaultOptions struct {
 }
 
 func NewVault(options *VaultOptions) Vault {
-	vaultImpl := &VaultImpl{
-		state:             make(map[string]lockInfo),
+	vault := &vaultImpl{
+		state:             make(map[string]*lockInfo),
 		clientLookUpTable: make(map[string][]string),
 	}
 	if options.QueueType == Single {
-		vaultImpl.queueLayer = queue.NewSingleQueue(
-			options.QueueCapacity, vaultImpl,
+		vault.queueLayer = queue.NewSingleQueue(
+			options.QueueCapacity, vault,
 		)
 	} else {
-		vaultImpl.queueLayer = queue.NewMultiQueue(
-			options.QueueConcurrency, options.QueueCapacity, vaultImpl,
+		vault.queueLayer = queue.NewMultiQueue(
+			options.QueueConcurrency, options.QueueCapacity, vault,
 		)
 	}
 
-	return vaultImpl
+	return vault
 }
 
 // Acquire attempts to acquire a lock. If the lock is currently busy, the
 // request in put on the queue for the lock tag in question, leading to a
 // notification once the holder has either released the lock or the lock
 // timeout hits.
-func (vaultImpl *VaultImpl) Acquire(
+func (vault *vaultImpl) Acquire(
 	lockTag string,
 	client string,
 	callback func(error) error,
 ) {
-	logger.Info("Client ", client, " acquiring ", lockTag)
-	vaultImpl.queueLayer.Enqueue(
-		lockTag, vaultImpl.acquireAction(client, callback),
+	log.Info("Client ", client, " acquiring ", lockTag)
+	vault.queueLayer.Enqueue(
+		lockTag, vault.acquireAction(client, callback),
 	)
 }
 
-func (vaultImpl *VaultImpl) acquireAction(
+func (vault *vaultImpl) acquireAction(
 	client string,
 	callback func(error) error,
-) func(lockTag string) {
+) queue.SynchronizedAction {
 	return func(lockTag string) {
-		currentState, ok := vaultImpl.state[lockTag]
-		if !ok {
-			vaultImpl.state[lockTag] = lockInfo{
-				client: "", lockState: UNLOCKED,
-			}
-			currentState = vaultImpl.state[lockTag]
-		}
+		currentState := vault.fetch(lockTag)
 		// a second acquire is a protocol offense, callback with error and
 		// release the lock, pop waitlisted client.
-		if currentState.client == client {
-			currentState.client = ""
-			currentState.lockState = UNLOCKED
-			vaultImpl.state[lockTag] = currentState
+		if currentState.isOwner(client) {
+			currentState.unlock()
 			_ = callback(UnecessaryAcquireError)
 
-			if lts, ok := vaultImpl.clientLookUpTable[client]; ok {
-				newLts := make([]string, len(lts)-1)
-				for _, lt := range lts {
-					if lt != lockTag {
-						newLts = append(newLts, lt)
-					}
-				}
-				vaultImpl.clientLookUpTable[client] = newLts
-			}
-
-			vaultImpl.queueLayer.PopWaitlist(lockTag)
+			vault.queueLayer.PopWaitlist(lockTag)
 			// client didn't match, and the lock state is LOCKED, waitlist the
 			// client
-		} else if currentState.lockState == LOCKED {
-			vaultImpl.queueLayer.Waitlist(
-				lockTag, vaultImpl.acquireAction(client, callback),
+		} else if currentState.isLocked() {
+			vault.queueLayer.Waitlist(
+				lockTag, vault.acquireAction(client, callback),
 			)
 		} else {
 			// This means a write failure occurred and the client that was
 			// acquiring the lock has NW issues or something.
 			if err := callback(nil); err != nil {
 				// don't touch the lock state, pop from waitlist
-				vaultImpl.queueLayer.PopWaitlist(lockTag)
+				vault.queueLayer.PopWaitlist(lockTag)
 			} else {
-				currentState.client = client
-				currentState.lockState = LOCKED
-				vaultImpl.state[lockTag] = currentState
-				if _, ok := vaultImpl.clientLookUpTable[client]; !ok {
-					vaultImpl.clientLookUpTable[client] = []string{lockTag}
-				} else {
-					vaultImpl.clientLookUpTable[client] = append(
-						vaultImpl.clientLookUpTable[client],
-						lockTag,
-					)
-				}
+				currentState.lock(client)
+				vault.appendClientLookupTable(client, lockTag)
 			}
 		}
 	}
@@ -159,82 +149,99 @@ func (vaultImpl *VaultImpl) acquireAction(
 
 // Release releases a lock, leading to a queued acquire calling the vault
 // callback.
-func (vaultImpl *VaultImpl) Release(
+func (vault *vaultImpl) Release(
 	lockTag string,
 	client string,
 	callback func(error) error,
 ) {
-	logger.Info("Client ", client, " releasing ", lockTag)
-	vaultImpl.queueLayer.Enqueue(lockTag, vaultImpl.releaseAction(client, callback))
+	log.Info("Client ", client, " releasing ", lockTag)
+	vault.queueLayer.Enqueue(lockTag, vault.releaseAction(client, callback))
 }
 
-func (vaultImpl *VaultImpl) releaseAction(
+func (vault *vaultImpl) releaseAction(
 	client string,
 	callback func(error) error,
-) func(lockTag string) {
+) queue.SynchronizedAction {
 	return func(lockTag string) {
-		currentState, ok := vaultImpl.state[lockTag]
-		if !ok {
-			vaultImpl.state[lockTag] = lockInfo{client: "", lockState: UNLOCKED}
-			currentState = vaultImpl.state[lockTag]
-		}
+		currentState := vault.fetch(lockTag)
 		// if already unlocked, kill the client for not following the protocol
-		if currentState.lockState == UNLOCKED {
+		if !currentState.isLocked() {
 			_ = callback(UnecessaryReleaseError)
 			// else, the lock is in LOCKED state, so check the owner, if
 			// client isn't the owner, it's misbehaving and needs to be killed
-		} else if currentState.client != client {
+		} else if !currentState.isOwner(client) {
 			_ = callback(BadMannersError)
 			// else, client is the owner of the lock, release it and call
 			// callback
 		} else {
-			currentState.client = ""
-			currentState.lockState = UNLOCKED
-			vaultImpl.state[lockTag] = currentState
-			_ = callback(nil)
+			currentState.unlock()
+			_ = callback(nil) // We don't care about release errors
 
-			if lts, ok := vaultImpl.clientLookUpTable[client]; ok {
-				newLts := make([]string, len(lts)-1)
-				for _, lt := range lts {
-					if lt != lockTag {
-						newLts = append(newLts, lt)
-					}
-				}
-				vaultImpl.clientLookUpTable[client] = newLts
-			}
+			vault.cleanClientLookupTable(client, lockTag)
 
-			vaultImpl.queueLayer.PopWaitlist(lockTag)
+			vault.queueLayer.PopWaitlist(lockTag)
 		}
 	}
 }
 
-func (vaultImpl *VaultImpl) Cleanup(client string) {
-	logger.Info("Cleaning up after client: ", client)
-	lockTags := vaultImpl.clientLookUpTable[client]
+func (vault *vaultImpl) Cleanup(client string) {
+	log.Info("Cleaning up after client: ", client)
+	lockTags := vault.clientLookUpTable[client]
 
 	for _, lockTag := range lockTags {
-		vaultImpl.queueLayer.Enqueue(
-			lockTag, func(lockTag string) {
-				if currentState, ok := vaultImpl.state[lockTag]; ok &&
-					currentState.client == client {
-					currentState.client = ""
-					currentState.lockState = UNLOCKED
-					vaultImpl.state[lockTag] = currentState
-					vaultImpl.queueLayer.PopWaitlist(lockTag)
-				}
-				delete(vaultImpl.clientLookUpTable, client)
-			},
+		vault.queueLayer.Enqueue(
+			lockTag, vault.cleanupAction(client),
 		)
+	}
+	delete(vault.clientLookUpTable, client)
+}
+
+func (vault *vaultImpl) cleanupAction(client string) queue.SynchronizedAction {
+	return func(lockTag string) {
+		if currentState := vault.fetch(lockTag); currentState.isOwner(client) {
+			currentState.unlock()
+			vault.queueLayer.PopWaitlist(lockTag)
+		}
 	}
 }
 
 // This member function is the only function allowed to touch the vault's lock
 // states. It is called from the queue layer after a dispatch via Enqueue().
-func (vaultImpl *VaultImpl) Synchronized(
+func (vault *vaultImpl) Synchronized(
 	lockTag string,
-	action func(string),
+	action queue.SynchronizedAction,
 ) {
-	logger.Debug("Entering synchronized access block for lock tag ", lockTag)
+	log.Debug("Entering synchronized access block for lock tag ", lockTag)
 	action(lockTag)
-	logger.Debug("Resulting vault state: \n", vaultImpl.state)
+	log.Debug("Resulting vault state: \n", vault.state)
+}
+
+func (vault *vaultImpl) fetch(lockTag string) *lockInfo {
+	li, ok := vault.state[lockTag]
+	if !ok {
+		li = newLockInfo()
+		vault.state[lockTag] = li
+	}
+
+	return li
+}
+
+func (vault *vaultImpl) appendClientLookupTable(client, lockTag string) {
+	if _, ok := vault.clientLookUpTable[client]; !ok {
+		vault.clientLookUpTable[client] = []string{lockTag}
+	} else {
+		vault.clientLookUpTable[client] = append(vault.clientLookUpTable[client], lockTag)
+	}
+}
+
+func (vault *vaultImpl) cleanClientLookupTable(client, lockTag string) {
+	if lts, ok := vault.clientLookUpTable[client]; ok {
+		newLts := make([]string, 0, len(lts)-1)
+		for _, lt := range lts {
+			if lt != lockTag {
+				newLts = append(newLts, lt)
+			}
+		}
+		vault.clientLookUpTable[client] = newLts
+	}
 }

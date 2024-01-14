@@ -36,7 +36,7 @@ func TestProtocol_decodeLockTag(t *testing.T) {
 	}
 
 	for i, bytes := range messages {
-		lockTag, err := decodeLockTag(bytes, messages[i][1])
+		lockTag, err := decodeLockTag(bytes)
 		if err != nil {
 			t.Error("Failed to decode ", bytes, ": ", err)
 		}
@@ -169,5 +169,26 @@ func TestProtocol_ServerMessage(t *testing.T) {
 func TestProtocol_EncodeClientMessage(t *testing.T) {
 	res := EncodeClientMessage(&ClientMessage{Type: Acquired, LockTag: "abc"})
 
-	t.Log(res)
+	if len(res) != 5 {
+		t.Error("Expected resulting byte array to have length 5")
+	}
+
+	cm, err := DecodeClientMessage(res)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if cm.Type != Acquired {
+		t.Error("Expected client message type to be Acquired")
+	}
+
+	if len(cm.LockTag) != 3 {
+		t.Error("Expected locktag size to be 3")
+	}
+}
+
+func Benchmark_Decoding(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _ = DecodeServerMessage([]byte{0, 9, 49, 49, 49, 49, 49, 49, 49, 49, 49})
+	}
 }

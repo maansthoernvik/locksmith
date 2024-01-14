@@ -1,6 +1,8 @@
 package queue
 
 import (
+	"math"
+
 	"github.com/maansthoernvik/locksmith/log"
 )
 
@@ -31,10 +33,10 @@ func NewMultiQueue(
 		ql.queues[i] = make(chan *queueItem, capacity)
 
 		go func(i int, queue chan *queueItem) {
-			log.Info("Starting multi queue ", i)
+			log.Info("Starting multi queue #", i)
 			for {
 				qi := <-queue
-				ql.handlePop(qi)
+				ql.synchronized.Synchronized(qi.lockTag, qi.callback)
 			}
 		}(i, ql.queues[i])
 	}
@@ -43,15 +45,15 @@ func NewMultiQueue(
 }
 
 func (multiQueue *multiQueue) Enqueue(lockTag string, callback func(string)) {
-	//log.Debug("Queueing up for lock tag:", lockTag)
+	log.Debug("Queueing up lock tag: ", lockTag)
 	hash := multiQueue.hashFunc(lockTag)
 	queueIndex := multiQueue.queueIndexFromHash(hash)
-	//log.Debug("Got hash", hash, "enqueueing with queue", queueIndex)
+	log.Debug("Got hash ", hash, " enqueueing with queue #", queueIndex)
 	multiQueue.queues[queueIndex] <- &queueItem{lockTag: lockTag, callback: callback}
 }
 
 func (multiQueue *multiQueue) Waitlist(lockTag string, callback func(string)) {
-	log.Debug("Waitlisting client for lock tag:", lockTag)
+	log.Debug("Waitlisting client for lock tag: ", lockTag)
 	_, ok := multiQueue.waitlist[lockTag]
 	if !ok {
 		multiQueue.waitlist[lockTag] = []*queueItem{{lockTag, callback}}
@@ -62,9 +64,9 @@ func (multiQueue *multiQueue) Waitlist(lockTag string, callback func(string)) {
 }
 
 func (multiQueue *multiQueue) PopWaitlist(lockTag string) {
-	log.Debug("Popping from waitlist:", lockTag)
+	log.Debug("Popping from waitlist: ", lockTag)
 	if wl, ok := multiQueue.waitlist[lockTag]; ok && len(wl) > 0 {
-		log.Debug("Found waitlist for", lockTag)
+		log.Debug("Found waitlist for ", lockTag)
 		first := wl[0]
 
 		if len(wl) == 1 {
@@ -76,17 +78,12 @@ func (multiQueue *multiQueue) PopWaitlist(lockTag string) {
 
 		first.callback(first.lockTag)
 	} else {
-		log.Debug("No waitlisted clients for lock tag:", lockTag)
+		log.Info("No waitlisted clients for lock tag: ", lockTag)
 	}
 }
 
-func (multiQueue *multiQueue) handlePop(qi *queueItem) {
-	multiQueue.synchronized.Synchronized(qi.lockTag, qi.callback)
-}
-
 func (multiQueue *multiQueue) queueIndexFromHash(hash uint16) uint16 {
-	// Since using integer division, anything above 65535 - numQueues will yield an out of bounds index
-	if hash == 65535 {
+	if hash == math.MaxUint16 {
 		return uint16(len(multiQueue.queues)) - 1
 	}
 

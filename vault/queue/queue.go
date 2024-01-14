@@ -10,9 +10,11 @@ type QueueLayer interface {
 	PopWaitlist(lockTag string)
 }
 
+type SynchronizedAction func(lockTag string)
+
 // Interface for calls made by the synchronization thread in the queue layer.
 type Synchronized interface {
-	Synchronized(lockTag string, callback func(lockTag string))
+	Synchronized(lockTag string, action SynchronizedAction)
 }
 
 type queueItem struct {

@@ -2,6 +2,8 @@ package queuetest
 
 import (
 	"math/rand"
+
+	"github.com/maansthoernvik/locksmith/vault/queue"
 )
 
 type testSynchronized struct {
@@ -10,7 +12,7 @@ type testSynchronized struct {
 
 const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-func (ts *testSynchronized) Synchronized(lockTag string, callback func(string)) {
+func (ts *testSynchronized) Synchronized(lockTag string, callback queue.SynchronizedAction) {
 	ts.callCount++
 	//log.Println("Synchronized called, call count =", ts.callCount)
 	callback(lockTag)

@@ -71,7 +71,7 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 				log.Error("Connection read error: ", err)
 			}
 
-			// Connection has been closed, clean up client data
+			// Connection error, clean up client data
 			locksmith.vault.Cleanup(conn.RemoteAddr().String())
 			break
 		}

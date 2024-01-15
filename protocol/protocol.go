@@ -1,3 +1,4 @@
+// Package protocol implements decoding and encoding of client/server messages of the Locksmith protocol.
 package protocol
 
 import (
@@ -8,6 +9,7 @@ import (
 	"github.com/maansthoernvik/locksmith/log"
 )
 
+// ServerMessageType encompasses all messages: Client -> Locksmith.
 type ServerMessageType byte
 
 const (
@@ -15,29 +17,42 @@ const (
 	Release ServerMessageType = 1
 )
 
+// ClientMessageType encompasses all messages: Locksmith -> Client.
 type ClientMessageType byte
 
 const (
 	Acquired ClientMessageType = 0
 )
 
-var ServerMessageDecodeError = errors.New("Server message decoding error")
-var ClientMessageDecodeError = errors.New("Client message decoding error")
-var ServerMessageTypeError = errors.New("Server message type not found")
-var ClientMessageTypeError = errors.New("Client message type not found")
-var LockTagSizeError = errors.New("Lock tag size does not match actual lock tag size")
-var LockTagEncodingError = errors.New("Lock tag was not valid UTF8")
+// Errors returned by encoding/decoding functions.
+var (
+	ServerMessageDecodeError = errors.New("Server message decoding error")
+	ClientMessageDecodeError = errors.New("Client message decoding error")
+	ServerMessageTypeError   = errors.New("Server message type not found")
+	ClientMessageTypeError   = errors.New("Client message type not found")
+	LockTagSizeError         = errors.New("Lock tag size does not match actual lock tag size")
+	LockTagEncodingError     = errors.New("Lock tag was not valid UTF8")
+)
 
+// ServerMessage models a server-bound message.
 type ServerMessage struct {
 	Type    ServerMessageType
 	LockTag string
 }
 
+// ClientMessage models a client-bound message.
 type ClientMessage struct {
 	Type    ClientMessageType
 	LockTag string
 }
 
+// DecodeServerMessage decodes a slice of bytes into a ServerMessage pointer.
+//
+// There are a few possible errors:
+//   - The length exceeds or is shorter than the possible bounds.
+//   - The lock tag size does not match the communicated size.
+//   - The server message type is not recognized.
+//   - The lock tag is not valid UTF8.
 func DecodeServerMessage(bytes []byte) (*ServerMessage, error) {
 	log.Debug("Decoding:", bytes)
 	if len(bytes) < 3 || len(bytes) > 257 {
@@ -60,6 +75,7 @@ func DecodeServerMessage(bytes []byte) (*ServerMessage, error) {
 	return &ServerMessage{Type: messageType, LockTag: lockTag}, nil
 }
 
+// EncodeServerMessage converts a ServerMessage into a slice of bytes to be sent over a wire.
 func EncodeServerMessage(serverMessage *ServerMessage) []byte {
 	bytes := make([]byte, 2+len(serverMessage.LockTag))
 	bytes[0] = byte(serverMessage.Type)
@@ -70,6 +86,13 @@ func EncodeServerMessage(serverMessage *ServerMessage) []byte {
 	return bytes
 }
 
+// DecodeClientMessage decodes a slice of bytes into a ClientMessage pointer.
+//
+// There are a few possible errors:
+//   - The length exceeds or is shorter than the possible bounds.
+//   - The lock tag size does not match the communicated size.
+//   - The client message type is not recognized.
+//   - The lock tag is not valid UTF8.
 func DecodeClientMessage(bytes []byte) (*ClientMessage, error) {
 	log.Debug("Decoding: ", bytes)
 	if len(bytes) < 3 || len(bytes) > 257 {
@@ -92,6 +115,7 @@ func DecodeClientMessage(bytes []byte) (*ClientMessage, error) {
 	return &ClientMessage{Type: messageType, LockTag: lockTag}, nil
 }
 
+// EncodeServerMessage converts a ServerMessage into a slice of bytes to be sent over a wire.
 func EncodeClientMessage(clientMessage *ClientMessage) []byte {
 	bytes := make([]byte, 2+len(clientMessage.LockTag))
 	log.Debug("Initialized slice with size: ", len(bytes))
@@ -108,6 +132,7 @@ func EncodeClientMessage(clientMessage *ClientMessage) []byte {
 	return bytes
 }
 
+// decodeserverMessageType attempts to extract the ServerMessageType from the given byte slice.
 func decodeServerMessageType(bytes []byte) (ServerMessageType, error) {
 	switch ServerMessageType(bytes[0]) {
 	case Acquire:
@@ -118,6 +143,7 @@ func decodeServerMessageType(bytes []byte) (ServerMessageType, error) {
 	return 0, ServerMessageTypeError
 }
 
+// decodeserverMessageType attempts to extract the ClientMessageType from the given byte slice.
 func decodeClientMessageType(bytes []byte) (ClientMessageType, error) {
 	switch ClientMessageType(bytes[0]) {
 	case Acquired:
@@ -126,6 +152,7 @@ func decodeClientMessageType(bytes []byte) (ClientMessageType, error) {
 	return 0, ClientMessageTypeError
 }
 
+// decodeLockTag check whether the input byte slice contains a valid lock tag and if so returns is as a string.
 func decodeLockTag(bytes []byte) (string, error) {
 	lockTag := bytes[2:]
 	if !utf8.Valid(lockTag) {

@@ -1,3 +1,4 @@
+// This package implements a simple CLI for Locksmith.
 package main
 
 import (

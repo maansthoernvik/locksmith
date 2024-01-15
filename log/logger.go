@@ -1,3 +1,4 @@
+// Package log wraps Golang's stdlib logging to allow for setting a log level.
 package log
 
 import (

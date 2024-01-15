@@ -1,3 +1,4 @@
+// Package client provides a sample implementation of a Locksmith client.
 package client
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/maansthoernvik/locksmith/protocol"
 )
 
+// Client provides a simple interface for a Locksmith client.
 type Client interface {
 	Acquire(lockTag string) error
 	Release(lockTag string) error
@@ -17,6 +19,7 @@ type Client interface {
 	Close()
 }
 
+// ClientOptions to provide at client instantiation.
 type ClientOptions struct {
 	Host       string
 	Port       uint16
@@ -24,6 +27,7 @@ type ClientOptions struct {
 	OnAcquired func(lockTag string)
 }
 
+// Implements the Client interface.
 type clientImpl struct {
 	host       string
 	port       uint16
@@ -43,6 +47,10 @@ func NewClient(options *ClientOptions) Client {
 	}
 }
 
+// Connect to Locksmith, returning an error in case there is some connectivity error.
+// Special note: if TLS version 13 is used, the Connect() function will not return an
+// error, even if something is wrong, until the first client write is issues. This is
+// because of how TLS 13 is implemented.
 func (clientImpl *clientImpl) Connect() (err error) {
 	if clientImpl.tlsConfig != nil {
 		log.Info("Dialing (TLS) ", clientImpl.host+":"+fmt.Sprint(clientImpl.port))
@@ -95,11 +103,14 @@ func (clientImpl *clientImpl) Connect() (err error) {
 	return nil
 }
 
+// Close disconnects from the Locksmith instance.
 func (clientImpl *clientImpl) Close() {
 	close(clientImpl.stop)
 	clientImpl.conn.Close()
 }
 
+// Acquire the given lock tag.
+// When the server responds, the onAcquired callback is called with the acquired lock tag.
 func (clientImpl *clientImpl) Acquire(lockTag string) error {
 	_, writeErr := clientImpl.conn.Write(
 		protocol.EncodeServerMessage(
@@ -110,6 +121,7 @@ func (clientImpl *clientImpl) Acquire(lockTag string) error {
 	return writeErr
 }
 
+// Release the given lock tag.
 func (clientImpl *clientImpl) Release(lockTag string) error {
 	_, writeErr := clientImpl.conn.Write(
 		protocol.EncodeServerMessage(

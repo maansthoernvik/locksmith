@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,12 +13,19 @@ import (
 	"github.com/maansthoernvik/locksmith/log"
 	"github.com/maansthoernvik/locksmith/server"
 	"github.com/maansthoernvik/locksmith/vault"
+	"github.com/maansthoernvik/locksmith/version"
 )
 
 func main() {
 	// Set global log level
 	logLevel, _ := env.GetOptionalString(env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT)
 	log.SetLogLevel(log.Translate(logLevel))
+
+	// Print to bypass loglevel settings and write to stdout
+	fmt.Printf(
+		"Starting Locksmith... \n  Version: %s\n   Commit: %s\n    Built: %s",
+		version.Version, version.Commit, version.Built,
+	)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -51,6 +59,7 @@ func main() {
 	log.Info("Server stopped")
 }
 
+// Fetch TLS config to supply the TCP listener.
 func getTlsConfig() *tls.Config {
 	tlsConfig := &tls.Config{}
 

@@ -37,7 +37,7 @@ func TestTcpAcceptor_AcceptConnections(t *testing.T) {
 	defer tcpAcceptor.Stop()
 
 	go func(wg *sync.WaitGroup) {
-		<-time.After(5 * time.Second)
+		<-time.After(1 * time.Second)
 		if !handled_connection {
 			t.Error("Did not handle connection...")
 			wg.Done()

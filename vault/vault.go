@@ -1,3 +1,4 @@
+// Package vault solves the handling of mutexes.
 package vault
 
 import (
@@ -18,7 +19,13 @@ var UnecessaryAcquireError = errors.New(
 	"Client tried to acquire a lock that it already had acquired",
 )
 
+// The Vault interface specifies high level functions to implement in order to
+// handle the acquisition and release of mutexes.
 type Vault interface {
+	// Lock tag is a string identifying the lock to acquire, client the requesting party,
+	// and the callback a function which will be called to either confirm acquisition or
+	// including an error in case the client is misbehaving. The callback may return an
+	// error in case feedback handling encounters an error.
 	Acquire(lockTag string, client string, callback func(error) error)
 	Release(lockTag string, client string, callback func(error) error)
 	Cleanup(client string)
@@ -62,9 +69,14 @@ func (li *lockInfo) String() string {
 	return fmt.Sprintf("&lockInfo{c: %s, s: %v}", li.client, li.lockState)
 }
 
+// Implementation of the Vault interface. By use of a queue layer, the vault ensures
+// lock states are only manipulated from one Go-routine at a time. Read more in the
+// QueueLayer interface description.
 type vaultImpl struct {
-	queueLayer        queue.QueueLayer
-	state             map[string]*lockInfo
+	queueLayer queue.QueueLayer
+	state      map[string]*lockInfo
+	// Used to keep track of which locks a client owns without having to iterate over
+	// all of them. Used when clients disconnect to release locks held by them.
 	clientLookUpTable map[string][]string
 }
 
@@ -76,9 +88,18 @@ const (
 )
 
 type VaultOptions struct {
+	// Single queue mode should only be used for testing.
 	QueueType
+
+	// Only for multi-mode queues, determines the number of
+	// supporting Go-routines able to handle work given to the
+	// queueing layer.
 	QueueConcurrency int
-	QueueCapacity    int
+
+	// Sets the capacity of the underlying queue(s), the max amount
+	// of buffered work for a queue. In a multi queue setting, the
+	// capacity indicates the buffer size per queue.
+	QueueCapacity int
 }
 
 func NewVault(options *VaultOptions) Vault {
@@ -114,6 +135,11 @@ func (vault *vaultImpl) Acquire(
 	)
 }
 
+// Returns a callback to call once the vault has gotten hold of a
+// synchronization Go-routine. The returned action callback contains
+// handling for what should happen when a client requests to acquire
+// a lock. The returned callback is the only piece of code allowed to
+// handle acquiring locks.
 func (vault *vaultImpl) acquireAction(
 	client string,
 	callback func(error) error,
@@ -158,6 +184,10 @@ func (vault *vaultImpl) Release(
 	vault.queueLayer.Enqueue(lockTag, vault.releaseAction(client, callback))
 }
 
+// Returns a callback that handles the release of locks. This is the only piece
+// of code allowed to touch release-handling, similarily to the acquireAction
+// function. The returned function must only be called from the scope of a
+// synchronization Go-routine.
 func (vault *vaultImpl) releaseAction(
 	client string,
 	callback func(error) error,
@@ -184,6 +214,7 @@ func (vault *vaultImpl) releaseAction(
 	}
 }
 
+// Cleans up all information associated with a given client.
 func (vault *vaultImpl) Cleanup(client string) {
 	log.Info("Cleaning up after client: ", client)
 	lockTags := vault.clientLookUpTable[client]
@@ -196,6 +227,10 @@ func (vault *vaultImpl) Cleanup(client string) {
 	delete(vault.clientLookUpTable, client)
 }
 
+// Returns a callback that handles the cleanup of a client for a given lock tag.
+// This function must only be called from the scope of a synchronization
+// Go-routine, because just like the acquire- and releaseAction functions, it
+// handles the vault's lock states.
 func (vault *vaultImpl) cleanupAction(client string) queue.SynchronizedAction {
 	return func(lockTag string) {
 		if currentState := vault.fetch(lockTag); currentState.isOwner(client) {
@@ -226,6 +261,7 @@ func (vault *vaultImpl) fetch(lockTag string) *lockInfo {
 	return li
 }
 
+// Add a lock to a client's lookup table.
 func (vault *vaultImpl) appendClientLookupTable(client, lockTag string) {
 	if _, ok := vault.clientLookUpTable[client]; !ok {
 		vault.clientLookUpTable[client] = []string{lockTag}
@@ -234,6 +270,7 @@ func (vault *vaultImpl) appendClientLookupTable(client, lockTag string) {
 	}
 }
 
+// Remove a lock from a client's lookup table.
 func (vault *vaultImpl) cleanClientLookupTable(client, lockTag string) {
 	if lts, ok := vault.clientLookUpTable[client]; ok {
 		newLts := make([]string, 0, len(lts)-1)

@@ -1,3 +1,4 @@
+// Package server ties together the Locksmith server logic.
 package server
 
 import (
@@ -12,17 +13,25 @@ import (
 	"github.com/maansthoernvik/locksmith/vault"
 )
 
+// Locksmith is the root level object containing the implementation of the Locksmith server.
 type Locksmith struct {
 	tcpAcceptor connection.TCPAcceptor
 	vault       vault.Vault
 }
 
+// LocksmithOptions exposes the possible options to pass to a new Locksmith instance.
 type LocksmithOptions struct {
-	Port             uint16
-	QueueType        vault.QueueType
+	// Denotes the port which will listen for incoming connections.
+	Port uint16
+	// Selects the type of queue layer the vault will use.
+	QueueType vault.QueueType
+	// Sets the number of synchronization threads, the higher the number the less the chance of congestion.
 	QueueConcurrency int
-	QueueCapacity    int
-	TlsConfig        *tls.Config
+	// Determines the buffer size of each synchronization thread, after the buffer limit is reached, calls
+	// to the queue layer will block until the congestion is resolved.
+	QueueCapacity int
+	// TLS configuration for the TCP acceptor.
+	TlsConfig *tls.Config
 }
 
 func New(options *LocksmithOptions) *Locksmith {
@@ -42,6 +51,7 @@ func New(options *LocksmithOptions) *Locksmith {
 	return locksmith
 }
 
+// Blocking call! Starts the Locksmith instance. Call Stop() to stop the instance.
 func (locksmith *Locksmith) Start(ctx context.Context) error {
 	err := locksmith.tcpAcceptor.Start()
 	if err != nil {
@@ -57,7 +67,11 @@ func (locksmith *Locksmith) Start(ctx context.Context) error {
 	return err
 }
 
-// Incoming connections from the TCP acceptor come here first.
+// Handler for connections accepted by the TCP acceptor. This function contains
+// a connection loop which only ends upon the client connection encountering an
+// error, either due to a problem or shutdown of the client connection. Gotten
+// messages will be attempted to be decoded, if decoding fails the loop is
+// broken and the client connection disconnected.
 func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 	log.Info("Connection accepted from: ", conn.RemoteAddr().String())
 	for {
@@ -91,20 +105,33 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 	}
 }
 
+// After decoding, this function determines the handling of the decoded
+// message.
 func (locksmith *Locksmith) handleIncomingMessage(
 	conn net.Conn,
 	serverMessage *protocol.ServerMessage,
 ) {
 	switch serverMessage.Type {
 	case protocol.Acquire:
-		locksmith.vault.Acquire(serverMessage.LockTag, conn.RemoteAddr().String(), locksmith.acquireCallback(conn, serverMessage.LockTag))
+		locksmith.vault.Acquire(
+			serverMessage.LockTag,
+			conn.RemoteAddr().String(),
+			locksmith.acquireCallback(conn, serverMessage.LockTag),
+		)
 	case protocol.Release:
-		locksmith.vault.Release(serverMessage.LockTag, conn.RemoteAddr().String(), locksmith.releaseCallback(conn))
+		locksmith.vault.Release(
+			serverMessage.LockTag,
+			conn.RemoteAddr().String(),
+			locksmith.releaseCallback(conn),
+		)
 	default:
 		log.Error("Invalid message type")
 	}
 }
 
+// Returns a callback function to call once a lock has been acquired, to send
+// feedback down the client connection. If the callback is called with an error,
+// the client has misbehaved in some way and needs to be disconnected.
 func (locksmith *Locksmith) acquireCallback(
 	conn net.Conn,
 	lockTag string,
@@ -130,6 +157,9 @@ func (locksmith *Locksmith) acquireCallback(
 	}
 }
 
+// Returns a callback function to call once a lock has been released. If the
+// callback is called with an error, the client has misbehaved in some way and
+// needs to be disconnected.
 func (locksmith *Locksmith) releaseCallback(
 	conn net.Conn,
 ) func(error) error {

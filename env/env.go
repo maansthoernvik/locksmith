@@ -1,5 +1,4 @@
-// The env package provides utilities to register expected environment variables and their type.
-// You can register either required or optional variables to be parsed from the current environment.
+// Package env provides some rudimentary environment variable parsing.
 package env
 
 import (

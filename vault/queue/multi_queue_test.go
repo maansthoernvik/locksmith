@@ -76,53 +76,6 @@ func Test_queueIndexFromHash(t *testing.T) {
 	}
 }
 
-func Test_WaitList(t *testing.T) {
-	log.SetLogLevel(log.DEBUG)
-	mq := NewMultiQueue(5, 10, &testSynchronized{}).(*multiQueue)
-
-	firstCalled := false
-	mq.Waitlist("lt", func(lockTag string) { firstCalled = true })
-	if len(mq.waitlist) != 1 {
-		t.Fatal("Expected wait list size to be 1, was:", len(mq.waitlist))
-	}
-
-	secondCalled := false
-	mq.Waitlist("lt", func(lockTag string) { secondCalled = true })
-	if len(mq.waitlist) != 1 {
-		t.Fatal("Expected wait list size to be 1, was:", len(mq.waitlist))
-	}
-
-	if len(mq.waitlist["lt"]) != 2 {
-		t.Fatal("Expected wait list for 'lt' to be 2, was:", len(mq.waitlist))
-	}
-	if firstCalled || secondCalled {
-		t.Fatal("For some reason first or second waitlisted callback has been called...")
-	}
-
-	mq.PopWaitlist("lt")
-	if len(mq.waitlist) != 1 {
-		t.Fatal("Expected wait list size to be 1, was:", len(mq.waitlist))
-	}
-	if !firstCalled {
-		t.Fatal("First waitlisted callback should have been called")
-	}
-	if secondCalled {
-		t.Fatal("Second callback should NOT have been called")
-	}
-
-	if len(mq.waitlist["lt"]) != 1 {
-		t.Fatal("Expected wait list for 'lt' to be 1, was:", len(mq.waitlist))
-	}
-
-	mq.PopWaitlist("lt")
-	if !secondCalled {
-		t.Fatal("Second callback should have been called")
-	}
-	if len(mq.waitlist) != 0 {
-		t.Fatal("Expected wait list size to be 0, was:", len(mq.waitlist))
-	}
-}
-
 func Test_Enqueue(t *testing.T) {
 	mq := NewMultiQueue(5, 10, &testSynchronized{}).(*multiQueue)
 	calls := 1000

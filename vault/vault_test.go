@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/maansthoernvik/locksmith/log"
-	"github.com/maansthoernvik/locksmith/vault/queue"
 )
 
 type testQueueLayer struct {
@@ -27,7 +26,7 @@ func (tql *testQueueLayer) PopWaitlist(lockTag string) {
 
 func Test_Acquire(t *testing.T) {
 	v := &vaultImpl{
-		state:             make(map[string]*lockInfo),
+		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
 	}
 	v.queueLayer = &testQueueLayer{vault: v}
@@ -50,7 +49,7 @@ func Test_Acquire(t *testing.T) {
 
 func Test_Release(t *testing.T) {
 	v := &vaultImpl{
-		state:             make(map[string]*lockInfo),
+		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
 	}
 	v.queueLayer = &testQueueLayer{vault: v}
@@ -78,11 +77,12 @@ func Test_Release(t *testing.T) {
 
 func Test_Waitlist(t *testing.T) {
 	v := &vaultImpl{
-		state:             make(map[string]*lockInfo),
+		state:             make(map[string]*lock),
+		wlist:             make(map[string][]*func(string)),
 		clientLookUpTable: make(map[string][]string),
 	}
 	// Use single queue for waitlist functionality
-	v.queueLayer = queue.NewSingleQueue(1, v)
+	v.queueLayer = &testQueueLayer{vault: v}
 
 	order := make([]string, 0, 3)
 
@@ -127,7 +127,7 @@ func Test_Waitlist(t *testing.T) {
 
 func Test_ReleaseBadManners(t *testing.T) {
 	v := &vaultImpl{
-		state:             make(map[string]*lockInfo),
+		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
 	}
 	v.queueLayer = &testQueueLayer{vault: v}
@@ -147,7 +147,7 @@ func Test_ReleaseBadManners(t *testing.T) {
 
 func Test_UnecessaryRelease(t *testing.T) {
 	v := &vaultImpl{
-		state:             make(map[string]*lockInfo),
+		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
 	}
 	v.queueLayer = &testQueueLayer{vault: v}
@@ -164,7 +164,7 @@ func Test_UnecessaryRelease(t *testing.T) {
 
 func Test_UnecessaryAcquire(t *testing.T) {
 	v := &vaultImpl{
-		state:             make(map[string]*lockInfo),
+		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
 	}
 	v.queueLayer = &testQueueLayer{vault: v}
@@ -185,7 +185,7 @@ func Test_UnecessaryAcquire(t *testing.T) {
 
 func Test_CallbackError(t *testing.T) {
 	v := &vaultImpl{
-		state:             make(map[string]*lockInfo),
+		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
 	}
 	v.queueLayer = &testQueueLayer{vault: v}
@@ -195,8 +195,8 @@ func Test_CallbackError(t *testing.T) {
 		// Because of the returned error, another client is able to acquire the lock
 		return errors.New("some kind of error")
 	})
-	if li, ok := v.state["lt"]; ok {
-		if li.client != "" || li.lockState != UNLOCKED {
+	if l, ok := v.state["lt"]; ok {
+		if l.owner != "" || l.state != UNLOCKED {
 			t.Error("Unexpected lock state")
 		}
 	}
@@ -206,8 +206,8 @@ func Test_CallbackError(t *testing.T) {
 		return nil
 	})
 
-	if li, ok := v.state["lt"]; ok {
-		if li.client != "client2" || li.lockState != LOCKED {
+	if l, ok := v.state["lt"]; ok {
+		if l.owner != "client2" || l.state != LOCKED {
 			t.Error("Expected client2 to have acquired the lock")
 		}
 	}
@@ -216,41 +216,46 @@ func Test_CallbackError(t *testing.T) {
 func Test_Cleanup(t *testing.T) {
 	log.SetLogLevel(log.WARNING)
 	v := &vaultImpl{
-		state:             make(map[string]*lockInfo),
+		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
 	}
 	v.queueLayer = &testQueueLayer{vault: v}
 
-	t.Log(v.clientLookUpTable)
+	t.Log("Initial lookup table state: ", v.clientLookUpTable)
 
 	v.Acquire("lt", "client", func(err error) error {
 		t.Log("Acquire lt client callback called with error:", err)
 		return nil
 	})
 	t.Log(v.clientLookUpTable)
+
 	v.Acquire("lt2", "client", func(err error) error {
 		t.Log("Acquire lt2 client callback called with error:", err)
 		return nil
 	})
 	t.Log(v.clientLookUpTable)
+
 	v.Acquire("lt3", "client", func(err error) error {
 		t.Log("Acquire lt3 client callback called with error:", err)
 		return nil
 	})
 	t.Log(v.clientLookUpTable)
-	li := v.state["lt"]
-	if li.client != "client" && li.lockState != LOCKED {
-		t.Error("client does not have acquired lock")
+
+	t.Log("Checking who owns 'lt'...")
+	l := v.state["lt"]
+	if l.owner != "client" && l.state != LOCKED {
+		t.Fatal("client does not have acquired lock")
 	}
 
 	lts, ok := v.clientLookUpTable["client"]
 	if !ok {
-		t.Error("Could not find client in client lookup table")
+		t.Fatal("Could not find client in client lookup table")
 	}
 
 	if len(lts) != 3 {
-		t.Error("Unexpected length of lock tags owner by client")
+		t.Fatal("Unexpected length of lock tags owner by client")
 	}
+	t.Log("Lock states before release: ", v.state)
 
 	v.Release("lt3", "client", func(err error) error {
 		t.Log("Release lt3 client callback called with error:", err)
@@ -260,26 +265,28 @@ func Test_Cleanup(t *testing.T) {
 
 	lts, ok = v.clientLookUpTable["client"]
 	if !ok {
-		t.Error("Could not find client in client lookup table")
+		t.Fatal("Could not find client in client lookup table")
 	}
 
 	if len(lts) != 2 {
-		t.Error("Unexpected length of lock tags owned by client")
+		t.Fatal("Unexpected length of lock tags owned by client")
 	}
 
 	v.Cleanup("client")
-	if v.state["lt"].client != "" && v.state["lt"].lockState != UNLOCKED {
+	if v.state["lt"].owner != "" && v.state["lt"].state != UNLOCKED {
 		t.Error("Cleanup wasn't successful")
 	}
-	if v.state["lt2"].client != "" && v.state["lt"].lockState != UNLOCKED {
+	if v.state["lt2"].owner != "" && v.state["lt"].state != UNLOCKED {
 		t.Error("Cleanup wasn't successful")
 	}
-	if v.state["lt3"].client != "" && v.state["lt"].lockState != UNLOCKED {
+	if v.state["lt3"].owner != "" && v.state["lt"].state != UNLOCKED {
 		t.Error("Cleanup wasn't successful")
 	}
 
 	_, ok = v.clientLookUpTable["client"]
 	if ok {
-		t.Error("Client lookup table should have been cleared")
+		t.Fatal("Client lookup table should have been cleared")
 	}
+	t.Log("Resulting lookup table after cleanup: ", v.clientLookUpTable)
+	t.Log("Resulting state after cleanup: ", v.state)
 }

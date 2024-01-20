@@ -38,35 +38,36 @@ const (
 	UNLOCKED lockState = false
 )
 
-type lockInfo struct {
-	client string
-	lockState
+type lock struct {
+	owner string
+	state lockState
 }
 
-func newLockInfo() *lockInfo {
-	return &lockInfo{client: "", lockState: UNLOCKED}
+func newlock() *lock {
+	return &lock{owner: "", state: UNLOCKED}
 }
 
-func (li *lockInfo) isOwner(client string) bool {
-	return li.client == client
+// implies lock is in LOCKED state
+func (l *lock) isOwner(client string) bool {
+	return l.owner == client
 }
 
-func (li *lockInfo) isLocked() bool {
-	return li.lockState == LOCKED
+func (l *lock) isLocked() bool {
+	return l.state == LOCKED
 }
 
-func (li *lockInfo) unlock() {
-	li.lockState = UNLOCKED
-	li.client = ""
+func (l *lock) unlock() {
+	l.state = UNLOCKED
+	l.owner = ""
 }
 
-func (li *lockInfo) lock(client string) {
-	li.lockState = LOCKED
-	li.client = client
+func (l *lock) lock(client string) {
+	l.state = LOCKED
+	l.owner = client
 }
 
-func (li *lockInfo) String() string {
-	return fmt.Sprintf("&lockInfo{c: %s, s: %v}", li.client, li.lockState)
+func (l *lock) String() string {
+	return fmt.Sprintf("&lock{c: %s, s: %v}", l.owner, l.state)
 }
 
 // Implementation of the Vault interface. By use of a queue layer, the vault ensures
@@ -74,7 +75,11 @@ func (li *lockInfo) String() string {
 // QueueLayer interface description.
 type vaultImpl struct {
 	queueLayer queue.QueueLayer
-	state      map[string]*lockInfo
+	state      map[string]*lock
+
+	// Waitlisted clients per lock.
+	wlist map[string][]*func(lockTag string)
+
 	// Used to keep track of which locks a client owns without having to iterate over
 	// all of them. Used when clients disconnect to release locks held by them.
 	clientLookUpTable map[string][]string
@@ -104,7 +109,8 @@ type VaultOptions struct {
 
 func NewVault(options *VaultOptions) Vault {
 	vault := &vaultImpl{
-		state:             make(map[string]*lockInfo),
+		state:             make(map[string]*lock),
+		wlist:             make(map[string][]*func(string)),
 		clientLookUpTable: make(map[string][]string),
 	}
 	if options.QueueType == Single {
@@ -121,9 +127,8 @@ func NewVault(options *VaultOptions) Vault {
 }
 
 // Acquire attempts to acquire a lock. If the lock is currently busy, the
-// request in put on the queue for the lock tag in question, leading to a
-// notification once the holder has either released the lock or the lock
-// timeout hits.
+// request in put on a waiting list for the lock tag in question, leading to a
+// notification once the holder has released the lock.
 func (vault *vaultImpl) Acquire(
 	lockTag string,
 	client string,
@@ -152,11 +157,11 @@ func (vault *vaultImpl) acquireAction(
 			currentState.unlock()
 			_ = callback(UnecessaryAcquireError)
 
-			vault.queueLayer.PopWaitlist(lockTag)
+			vault.popWaitlist(lockTag)
 			// client didn't match, and the lock state is LOCKED, waitlist the
 			// client
 		} else if currentState.isLocked() {
-			vault.queueLayer.Waitlist(
+			vault.waitlist(
 				lockTag, vault.acquireAction(client, callback),
 			)
 		} else {
@@ -164,7 +169,7 @@ func (vault *vaultImpl) acquireAction(
 			// acquiring the lock has NW issues or something.
 			if err := callback(nil); err != nil {
 				// don't touch the lock state, pop from waitlist
-				vault.queueLayer.PopWaitlist(lockTag)
+				vault.popWaitlist(lockTag)
 			} else {
 				currentState.lock(client)
 				vault.appendClientLookupTable(client, lockTag)
@@ -209,7 +214,7 @@ func (vault *vaultImpl) releaseAction(
 
 			vault.cleanClientLookupTable(client, lockTag)
 
-			vault.queueLayer.PopWaitlist(lockTag)
+			vault.popWaitlist(lockTag)
 		}
 	}
 }
@@ -235,7 +240,7 @@ func (vault *vaultImpl) cleanupAction(client string) queue.SynchronizedAction {
 	return func(lockTag string) {
 		if currentState := vault.fetch(lockTag); currentState.isOwner(client) {
 			currentState.unlock()
-			vault.queueLayer.PopWaitlist(lockTag)
+			vault.popWaitlist(lockTag)
 		}
 	}
 }
@@ -251,14 +256,51 @@ func (vault *vaultImpl) Synchronized(
 	log.Debug("Resulting vault state: \n", vault.state)
 }
 
-func (vault *vaultImpl) fetch(lockTag string) *lockInfo {
-	li, ok := vault.state[lockTag]
+func (vault *vaultImpl) fetch(lockTag string) *lock {
+	lock, ok := vault.state[lockTag]
 	if !ok {
-		li = newLockInfo()
-		vault.state[lockTag] = li
+		lock = newlock()
+		vault.state[lockTag] = lock
 	}
 
-	return li
+	return lock
+}
+
+// IMPORTANT: only call from synchronized Go-routines.
+// Waitlist the input action, related to the given lock tag. Appends the action
+// to the back of the waitlist of the lock tag.
+func (vault *vaultImpl) waitlist(lockTag string, callback func(string)) {
+	log.Debug("Waitlisting client for lock tag: ", lockTag)
+	_, ok := vault.wlist[lockTag]
+	if !ok {
+		vault.wlist[lockTag] = []*func(string){&callback}
+	} else {
+		vault.wlist[lockTag] = append(vault.wlist[lockTag], &callback)
+	}
+	log.Debug("Resulting waitlist state:\n", vault.wlist)
+}
+
+// IMPORTANT: only call from synchronized Go-routines.
+// Pop from the waitlist belonging to the input lock tag, results in a waitlisted
+// action being called directly.
+func (vault *vaultImpl) popWaitlist(lockTag string) {
+	log.Debug("Popping from waitlist: ", lockTag)
+	if wl, ok := vault.wlist[lockTag]; ok && len(wl) > 0 {
+		log.Debug("Found waitlist for ", lockTag)
+		first := wl[0]
+
+		if len(wl) == 1 {
+			delete(vault.wlist, lockTag)
+		} else {
+			vault.wlist[lockTag] = wl[1:]
+		}
+		log.Debug("Resulting waitlist state:\n", vault.wlist)
+
+		f := *first
+		f(lockTag)
+	} else {
+		log.Info("No waitlisted clients for lock tag: ", lockTag)
+	}
 }
 
 // Add a lock to a client's lookup table.
@@ -273,12 +315,16 @@ func (vault *vaultImpl) appendClientLookupTable(client, lockTag string) {
 // Remove a lock from a client's lookup table.
 func (vault *vaultImpl) cleanClientLookupTable(client, lockTag string) {
 	if lts, ok := vault.clientLookUpTable[client]; ok {
-		newLts := make([]string, 0, len(lts)-1)
-		for _, lt := range lts {
-			if lt != lockTag {
-				newLts = append(newLts, lt)
+		if len(lts) == 1 {
+			delete(vault.clientLookUpTable, client)
+		} else {
+			newLts := make([]string, 0, len(lts)-1)
+			for _, lt := range lts {
+				if lt != lockTag {
+					newLts = append(newLts, lt)
+				}
 			}
+			vault.clientLookUpTable[client] = newLts
 		}
-		vault.clientLookUpTable[client] = newLts
 	}
 }

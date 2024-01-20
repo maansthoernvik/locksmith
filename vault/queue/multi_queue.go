@@ -24,7 +24,6 @@ import (
 type multiQueue struct {
 	queues       []chan *queueItem
 	hashFunc     func(string) uint16
-	waitlist     map[string][]*queueItem
 	synchronized Synchronized
 }
 
@@ -39,7 +38,6 @@ func NewMultiQueue(
 	ql := &multiQueue{
 		queues:       make([]chan *queueItem, concurrency),
 		hashFunc:     fnv1aHash,
-		waitlist:     make(map[string][]*queueItem),
 		synchronized: synchronized,
 	}
 
@@ -68,43 +66,6 @@ func (multiQueue *multiQueue) Enqueue(lockTag string, callback func(string)) {
 	queueIndex := multiQueue.queueIndexFromHash(hash)
 	log.Debug("Got hash ", hash, " enqueueing with queue #", queueIndex)
 	multiQueue.queues[queueIndex] <- &queueItem{lockTag: lockTag, callback: callback}
-}
-
-// IMPORTANT: only call from synchronization Go-routines.
-// Waitlist the input action, related to the given lock tag. Appends the action
-// to the back of the waitlist of the lock tag.
-func (multiQueue *multiQueue) Waitlist(lockTag string, callback func(string)) {
-	log.Debug("Waitlisting client for lock tag: ", lockTag)
-	_, ok := multiQueue.waitlist[lockTag]
-	if !ok {
-		multiQueue.waitlist[lockTag] = []*queueItem{{lockTag, callback}}
-	} else {
-		multiQueue.waitlist[lockTag] = append(multiQueue.waitlist[lockTag], &queueItem{lockTag, callback})
-	}
-	log.Debug("Resulting waitlist state:\n", multiQueue.waitlist)
-}
-
-// IMPORTANT: only call from synchronization Go-routines.
-// Pop from the waitlist belonging to the input lock tag, results in a waitlisted
-// action being called directly as this function assumes we're already in the scope
-// of a synchronization thread (thus skipping a second call to Synchronized(...)).
-func (multiQueue *multiQueue) PopWaitlist(lockTag string) {
-	log.Debug("Popping from waitlist: ", lockTag)
-	if wl, ok := multiQueue.waitlist[lockTag]; ok && len(wl) > 0 {
-		log.Debug("Found waitlist for ", lockTag)
-		first := wl[0]
-
-		if len(wl) == 1 {
-			delete(multiQueue.waitlist, lockTag)
-		} else {
-			multiQueue.waitlist[lockTag] = wl[1:]
-		}
-		log.Debug("Resulting waitlist state:\n", multiQueue.waitlist)
-
-		first.callback(first.lockTag)
-	} else {
-		log.Info("No waitlisted clients for lock tag: ", lockTag)
-	}
 }
 
 // Get a queue index from an input hash to select which queue should handle an

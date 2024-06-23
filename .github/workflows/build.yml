@@ -11,20 +11,20 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
           cache: false
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v6
         with:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v1.54
+          version: v1.59
 
           # Optional: working directory, useful for monorepos
           # working-directory: somedir
@@ -54,28 +54,33 @@ jobs:
   test: 
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
 
       - name: Test
-        run: go test ./... -v -timeout 10s
+        run: go test ./... -v -timeout 10s -coverprofile=coverage
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV }}
 
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
 
-      - name: Build binary
-        run: go build -v
+      - name: Build server binary
+        run: go build -o server-bin exec/server
+
+      - name: Build CLI binary
+        run: go build -o cli-bin exec/cli

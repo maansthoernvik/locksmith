@@ -9,9 +9,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/maansthoernvik/locksmith"
 	"github.com/maansthoernvik/locksmith/env"
 	"github.com/maansthoernvik/locksmith/log"
-	"github.com/maansthoernvik/locksmith/server"
 	"github.com/maansthoernvik/locksmith/vault"
 	"github.com/maansthoernvik/locksmith/version"
 )
@@ -23,7 +23,7 @@ func main() {
 
 	// Print to bypass loglevel settings and write to stdout
 	fmt.Printf(
-		"Starting Locksmith... \n  Version: %s\n   Commit: %s\n    Built: %s",
+		"starting Locksmith... \n  Version: %s\n   Commit: %s\n    Built: %s\n",
 		version.Version, version.Commit, version.Built,
 	)
 
@@ -33,7 +33,7 @@ func main() {
 		signal_ch := make(chan os.Signal, 1)
 		signal.Notify(signal_ch, syscall.SIGINT, syscall.SIGTERM)
 		signal := <-signal_ch
-		log.Info("Got signal: ", signal)
+		log.Info("got signal: ", signal)
 		cancel()
 	}()
 
@@ -42,7 +42,7 @@ func main() {
 	concurrency, _ := env.GetOptionalInteger(env.LOCKSMITH_Q_CONCURRENCY, env.LOCKSMITH_Q_CONCURRENCY_DEFAULT)
 	capacity, _ := env.GetOptionalInteger(env.LOCKSMITH_Q_CAPACITY, env.LOCKSMITH_Q_CAPACITY_DEFAULT)
 
-	locksmithOptions := &server.LocksmithOptions{
+	locksmithOptions := &locksmith.LocksmithOptions{
 		Port:             port,
 		QueueType:        vault.QueueType(queueType),
 		QueueConcurrency: concurrency,
@@ -51,12 +51,12 @@ func main() {
 	if tls, _ := env.GetOptionalBool(env.LOCKSMITH_TLS, env.LOCKSMITH_TLS_DEFAULT); tls {
 		locksmithOptions.TlsConfig = getTlsConfig()
 	}
-	if err := server.New(locksmithOptions).Start(ctx); err != nil {
-		log.Error("Server start error: ", err)
+	if err := locksmith.New(locksmithOptions).Start(ctx); err != nil {
+		log.Error("server start error: ", err)
 		os.Exit(1)
 	}
 
-	log.Info("Server stopped")
+	log.Info("server stopped")
 }
 
 // Fetch TLS config to supply the TCP listener.
@@ -67,7 +67,7 @@ func getTlsConfig() *tls.Config {
 	serverKeyPath, _ := env.GetOptionalString(env.LOCKSMITH_TLS_KEY_PATH, env.LOCKSMITH_TLS_KEY_PATH_DEFAULT)
 	cert, err := tls.LoadX509KeyPair(serverCertPath, serverKeyPath)
 	if err != nil {
-		panic("Failed to load server cert/key pair")
+		panic("failed to load server cert/key pair")
 	}
 	tlsConfig.Certificates = []tls.Certificate{cert}
 
@@ -77,7 +77,7 @@ func getTlsConfig() *tls.Config {
 		tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 		caCert, err := os.ReadFile(clientCaCertPath)
 		if err != nil {
-			panic("Failed to read client CA cert file")
+			panic("failed to read client CA cert file")
 		}
 		pool := x509.NewCertPool()
 		pool.AppendCertsFromPEM(caCert)

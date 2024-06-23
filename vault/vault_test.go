@@ -78,7 +78,7 @@ func Test_Release(t *testing.T) {
 func Test_Waitlist(t *testing.T) {
 	v := &vaultImpl{
 		state:             make(map[string]*lock),
-		wlist:             make(map[string][]*func(string)),
+		waitList:          make(map[string][]*func(string)),
 		clientLookUpTable: make(map[string][]string),
 	}
 	// Use single queue for waitlist functionality
@@ -138,7 +138,7 @@ func Test_ReleaseBadManners(t *testing.T) {
 	})
 	v.Release("lt", "client2", func(err error) error {
 		t.Log("Release client2 callback called with error:", err)
-		if !errors.Is(err, BadMannersError) {
+		if !errors.Is(err, ErrBadManners) {
 			t.Error("Expected BadMannersError")
 		}
 		return nil
@@ -154,7 +154,7 @@ func Test_UnecessaryRelease(t *testing.T) {
 
 	v.Release("lt", "client", func(err error) error {
 		t.Log("Release client callback called with error:", err)
-		if !errors.Is(err, UnecessaryReleaseError) {
+		if !errors.Is(err, ErrUnnecessaryRelease) {
 			t.Error("Expected UnecessaryReleaseError")
 		}
 
@@ -175,7 +175,7 @@ func Test_UnecessaryAcquire(t *testing.T) {
 	})
 	v.Acquire("lt", "client", func(err error) error {
 		t.Log("Acquire client callback called with error:", err)
-		if !errors.Is(err, UnecessaryAcquireError) {
+		if !errors.Is(err, ErrUnnecessaryAcquire) {
 			t.Error("Expected UnecesasryAcquireError")
 		}
 

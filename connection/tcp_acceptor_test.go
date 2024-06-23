@@ -54,7 +54,7 @@ func TestTcpAcceptor_AcceptConnections(t *testing.T) {
 }
 
 func TestTcpAcceptor_ClientEvictedNoTls(t *testing.T) {
-	cert, err := tls.LoadX509KeyPair("testcerts/testCert.pem", "testcerts/testKey.pem")
+	cert, err := tls.LoadX509KeyPair("testcerts/testcert.pem", "testcerts/testkey.key")
 	if err != nil {
 		t.Error("Error when loading cert and key pair", err)
 	}
@@ -71,15 +71,12 @@ func TestTcpAcceptor_ClientEvictedNoTls(t *testing.T) {
 	tcpAcceptor := NewTCPAcceptor(&TCPAcceptorOptions{
 		Handler: func(conn net.Conn) {
 			defer conn.Close()
-			for {
-				_, err := conn.Read(make([]byte, 25))
-				t.Log("Got bytes from client...")
-				if err != nil {
-					t.Log("Got expected error reading:", err)
-					break
-				}
+			_, err := conn.Read(make([]byte, 25))
+			t.Log("Got bytes from client...")
+			if err != nil {
+				t.Log("Got expected error reading:", err)
+			} else {
 				t.Error("Did not get an expected error while reading...")
-				break //nolint
 			}
 			wg.Done()
 		},
@@ -115,7 +112,7 @@ func TestTcpAcceptor_ClientEvictedNoTls(t *testing.T) {
 }
 
 func TestTcpAcceptor_MutualTls(t *testing.T) {
-	cert, err := tls.LoadX509KeyPair("testcerts/testCert.pem", "testcerts/testKey.pem")
+	cert, err := tls.LoadX509KeyPair("testcerts/testcert.pem", "testcerts/testkey.key")
 	if err != nil {
 		t.Error("Error when loading cert and key pair", err)
 	}
@@ -132,15 +129,12 @@ func TestTcpAcceptor_MutualTls(t *testing.T) {
 	tcpAcceptor := NewTCPAcceptor(&TCPAcceptorOptions{
 		Handler: func(conn net.Conn) {
 			defer conn.Close()
-			for {
-				_, err := conn.Read(make([]byte, 25))
-				t.Log("Got bytes from client...")
-				if err != nil {
-					t.Error("Got expected error reading:", err)
-					break
-				}
+			_, err := conn.Read(make([]byte, 25))
+			t.Log("Got bytes from client...")
+			if err != nil {
+				t.Error("Got expected error reading:", err)
+			} else {
 				t.Log("No error while reading, quitting connection loop")
-				break //nolint
 			}
 			wg.Done()
 		},
@@ -159,7 +153,7 @@ func TestTcpAcceptor_MutualTls(t *testing.T) {
 	}
 	defer tcpAcceptor.Stop()
 
-	clientCert, err := tls.LoadX509KeyPair("testcerts/testCert.pem", "testcerts/testKey.pem")
+	clientCert, err := tls.LoadX509KeyPair("testcerts/testcert.pem", "testcerts/testkey.key")
 	if err != nil {
 		t.Error(err)
 	}

@@ -9,14 +9,14 @@ import (
 	"github.com/maansthoernvik/locksmith/vault/queue"
 )
 
-var BadMannersError = errors.New(
-	"Client tried to release lock that it did not own",
+var ErrBadManners = errors.New(
+	"client tried to release lock that it did not own",
 )
-var UnecessaryReleaseError = errors.New(
-	"Client tried to release a lock that had not been acquired",
+var ErrUnnecessaryRelease = errors.New(
+	"client tried to release a lock that had not been acquired",
 )
-var UnecessaryAcquireError = errors.New(
-	"Client tried to acquire a lock that it already had acquired",
+var ErrUnnecessaryAcquire = errors.New(
+	"client tried to acquire a lock that it already had acquired",
 )
 
 // The Vault interface specifies high level functions to implement in order to
@@ -78,7 +78,7 @@ type vaultImpl struct {
 	state      map[string]*lock
 
 	// Waitlisted clients per lock.
-	wlist map[string][]*func(lockTag string)
+	waitList map[string][]*func(lockTag string)
 
 	// Used to keep track of which locks a client owns without having to iterate over
 	// all of them. Used when clients disconnect to release locks held by them.
@@ -110,7 +110,7 @@ type VaultOptions struct {
 func NewVault(options *VaultOptions) Vault {
 	vault := &vaultImpl{
 		state:             make(map[string]*lock),
-		wlist:             make(map[string][]*func(string)),
+		waitList:          make(map[string][]*func(string)),
 		clientLookUpTable: make(map[string][]string),
 	}
 	if options.QueueType == Single {
@@ -134,7 +134,7 @@ func (vault *vaultImpl) Acquire(
 	client string,
 	callback func(error) error,
 ) {
-	log.Info("Client ", client, " acquiring ", lockTag)
+	log.Info("client ", client, " acquiring ", lockTag)
 	vault.queueLayer.Enqueue(
 		lockTag, vault.acquireAction(client, callback),
 	)
@@ -150,17 +150,17 @@ func (vault *vaultImpl) acquireAction(
 	callback func(error) error,
 ) queue.SynchronizedAction {
 	return func(lockTag string) {
-		currentState := vault.fetch(lockTag)
+		lock := vault.fetch(lockTag)
 		// a second acquire is a protocol offense, callback with error and
 		// release the lock, pop waitlisted client.
-		if currentState.isOwner(client) {
-			currentState.unlock()
-			_ = callback(UnecessaryAcquireError)
+		if lock.isOwner(client) {
+			lock.unlock()
+			_ = callback(ErrUnnecessaryAcquire)
 
 			vault.popWaitlist(lockTag)
 			// client didn't match, and the lock state is LOCKED, waitlist the
 			// client
-		} else if currentState.isLocked() {
+		} else if lock.isLocked() {
 			vault.waitlist(
 				lockTag, vault.acquireAction(client, callback),
 			)
@@ -171,7 +171,7 @@ func (vault *vaultImpl) acquireAction(
 				// don't touch the lock state, pop from waitlist
 				vault.popWaitlist(lockTag)
 			} else {
-				currentState.lock(client)
+				lock.lock(client)
 				vault.appendClientLookupTable(client, lockTag)
 			}
 		}
@@ -185,7 +185,7 @@ func (vault *vaultImpl) Release(
 	client string,
 	callback func(error) error,
 ) {
-	log.Info("Client ", client, " releasing ", lockTag)
+	log.Info("client ", client, " releasing ", lockTag)
 	vault.queueLayer.Enqueue(lockTag, vault.releaseAction(client, callback))
 }
 
@@ -201,11 +201,11 @@ func (vault *vaultImpl) releaseAction(
 		currentState := vault.fetch(lockTag)
 		// if already unlocked, kill the client for not following the protocol
 		if !currentState.isLocked() {
-			_ = callback(UnecessaryReleaseError)
+			_ = callback(ErrUnnecessaryRelease)
 			// else, the lock is in LOCKED state, so check the owner, if
 			// client isn't the owner, it's misbehaving and needs to be killed
 		} else if !currentState.isOwner(client) {
-			_ = callback(BadMannersError)
+			_ = callback(ErrBadManners)
 			// else, client is the owner of the lock, release it and call
 			// callback
 		} else {
@@ -221,7 +221,7 @@ func (vault *vaultImpl) releaseAction(
 
 // Cleans up all information associated with a given client.
 func (vault *vaultImpl) Cleanup(client string) {
-	log.Info("Cleaning up after client: ", client)
+	log.Info("cleaning up after client: ", client)
 	lockTags := vault.clientLookUpTable[client]
 
 	for _, lockTag := range lockTags {
@@ -251,9 +251,9 @@ func (vault *vaultImpl) Synchronized(
 	lockTag string,
 	action queue.SynchronizedAction,
 ) {
-	log.Debug("Entering synchronized access block for lock tag ", lockTag)
+	log.Debug("entering synchronized access block for lock tag ", lockTag)
 	action(lockTag)
-	log.Debug("Resulting vault state: \n", vault.state)
+	log.Debug("resulting vault state: \n", vault.state)
 }
 
 func (vault *vaultImpl) fetch(lockTag string) *lock {
@@ -271,13 +271,13 @@ func (vault *vaultImpl) fetch(lockTag string) *lock {
 // to the back of the waitlist of the lock tag.
 func (vault *vaultImpl) waitlist(lockTag string, callback func(string)) {
 	log.Debug("Waitlisting client for lock tag: ", lockTag)
-	_, ok := vault.wlist[lockTag]
+	_, ok := vault.waitList[lockTag]
 	if !ok {
-		vault.wlist[lockTag] = []*func(string){&callback}
+		vault.waitList[lockTag] = []*func(string){&callback}
 	} else {
-		vault.wlist[lockTag] = append(vault.wlist[lockTag], &callback)
+		vault.waitList[lockTag] = append(vault.waitList[lockTag], &callback)
 	}
-	log.Debug("Resulting waitlist state:\n", vault.wlist)
+	log.Debug("Resulting waitlist state:\n", vault.waitList)
 }
 
 // IMPORTANT: only call from synchronized Go-routines.
@@ -285,16 +285,16 @@ func (vault *vaultImpl) waitlist(lockTag string, callback func(string)) {
 // action being called directly.
 func (vault *vaultImpl) popWaitlist(lockTag string) {
 	log.Debug("Popping from waitlist: ", lockTag)
-	if wl, ok := vault.wlist[lockTag]; ok && len(wl) > 0 {
+	if wl, ok := vault.waitList[lockTag]; ok && len(wl) > 0 {
 		log.Debug("Found waitlist for ", lockTag)
 		first := wl[0]
 
 		if len(wl) == 1 {
-			delete(vault.wlist, lockTag)
+			delete(vault.waitList, lockTag)
 		} else {
-			vault.wlist[lockTag] = wl[1:]
+			vault.waitList[lockTag] = wl[1:]
 		}
-		log.Debug("Resulting waitlist state:\n", vault.wlist)
+		log.Debug("Resulting waitlist state:\n", vault.waitList)
 
 		f := *first
 		f(lockTag)

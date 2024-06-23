@@ -181,7 +181,7 @@ func Test_ClientOnAcquired(t *testing.T) {
 }
 
 func Test_MutualTls(t *testing.T) {
-	cert, err := tls.LoadX509KeyPair("testcerts/testCert.pem", "testcerts/testKey.pem")
+	cert, err := tls.LoadX509KeyPair("testcerts/testcert.pem", "testcerts/testkey.key")
 	if err != nil {
 		t.Error("Error when loading cert and key pair", err)
 	}
@@ -224,33 +224,29 @@ func Test_MutualTls(t *testing.T) {
 			t.Log("Accepted connection from", conn.RemoteAddr().String())
 			go func(conn net.Conn) {
 				defer conn.Close()
-				for {
-					_, err := conn.Read(make([]byte, 25))
-					t.Log("Got bytes from client...")
-					if err != nil {
-						t.Error("Error reading:", err)
-						wg.Done()
-						break
-					}
-
-					//nolint
-					conn.Write(protocol.EncodeClientMessage(
-						&protocol.ClientMessage{
-							Type:    protocol.Acquired,
-							LockTag: "abc",
-						},
-					))
-
+				_, err := conn.Read(make([]byte, 25))
+				t.Log("Got bytes from client...")
+				if err != nil {
+					t.Error("Error reading:", err)
 					wg.Done()
-					break // nolint
 				}
+
+				//nolint
+				conn.Write(protocol.EncodeClientMessage(
+					&protocol.ClientMessage{
+						Type:    protocol.Acquired,
+						LockTag: "abc",
+					},
+				))
+
+				wg.Done()
 			}(conn)
 		}
 
 		shutdownWg.Done()
 	}()
 
-	clientCert, err := tls.LoadX509KeyPair("testcerts/testCert.pem", "testcerts/testKey.pem")
+	clientCert, err := tls.LoadX509KeyPair("testcerts/testcert.pem", "testcerts/testkey.key")
 	if err != nil {
 		t.Error(err)
 	}

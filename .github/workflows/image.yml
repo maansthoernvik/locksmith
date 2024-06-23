@@ -17,6 +17,7 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
+      # Used to get revision information in steps carried out prior to the image build.
       - uses: actions/checkout@v4
 
       - uses: docker/setup-qemu-action@v3
@@ -34,13 +35,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Ensure the build step can get hold of the version information.
       - run: echo "VERSION=$(git describe --tags --always --abbrev=0)" >> $GITHUB_ENV
-      - run: echo "PACKAGE=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-
-      - run: echo "VERSION=$VERSION PACKAGE=$PACKAGE"
+      - run: echo "COMMIT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
       - uses: docker/build-push-action@v6
         with:
+          build-args: |
+            "VERSION=${{ env.VERSION }},COMMIT=${{ env.COMMIT }}"
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

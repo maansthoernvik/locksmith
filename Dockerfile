@@ -6,6 +6,16 @@ WORKDIR /
 
 COPY . .
 
+ARG VERSION
+ARG COMMIT
+ENV VERSION=${VERSION}
+ENV COMMIT=${COMMIT}
+
+RUN echo "args="
+RUN echo "VERSION=${VERSION} COMMIT=${COMMIT}"
+RUN echo "envs="
+RUN echo "VERSION=$VERSION COMMIT=$COMMIT"
+
 RUN CGO_ENABLED=0 GOOS=linux ./build-set-version locksmith ./exec/server
 
 FROM alpine:latest

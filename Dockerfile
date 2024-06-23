@@ -2,11 +2,11 @@
 FROM golang:1.21 AS build
 
 # Set destination for COPY
-WORKDIR /locksmith
+WORKDIR /
 
-COPY . ./
+COPY . .
 
-RUN ./build_with_parameters
+RUN CGO_ENABLED=0 GOOS=linux ./build-set-version locksmith ./exec/server
 
 FROM alpine:latest
 
@@ -15,4 +15,4 @@ WORKDIR /
 COPY --from=build /locksmith .
 
 # Run
-CMD ["/locksmith"]
+CMD ["./locksmith"]

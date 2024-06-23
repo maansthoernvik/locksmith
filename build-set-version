@@ -1,8 +1,8 @@
 #! /bin/bash
 
 PACKAGE="github.com/maansthoernvik/locksmith"
-VERSION="$(git describe --tags --always --abbrev=0)"
-COMMIT="$(git rev-parse --short HEAD)"
+# VERSION
+# COMMIT
 BUILT="$(date)"
 
 echo "Building $1..."

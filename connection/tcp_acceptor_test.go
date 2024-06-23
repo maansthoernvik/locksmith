@@ -80,7 +80,7 @@ func TestTcpAcceptor_ClientEvictedNoTls(t *testing.T) {
 			}
 			wg.Done()
 		},
-		Port: 30000,
+		Port: 30001,
 		TlsConfig: &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			ClientAuth:   tls.RequireAndVerifyClientCert,
@@ -138,7 +138,7 @@ func TestTcpAcceptor_MutualTls(t *testing.T) {
 			}
 			wg.Done()
 		},
-		Port: 30000,
+		Port: 30002,
 		TlsConfig: &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			ClientAuth:   tls.RequireAndVerifyClientCert,

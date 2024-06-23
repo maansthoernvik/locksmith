@@ -54,12 +54,12 @@ func TestTcpAcceptor_AcceptConnections(t *testing.T) {
 }
 
 func TestTcpAcceptor_ClientEvictedNoTls(t *testing.T) {
-	cert, err := tls.LoadX509KeyPair("../testcerts/testcert.pem", "../testcerts/testkey.key")
+	cert, err := tls.LoadX509KeyPair("testcerts/testcert.pem", "testcerts/testkey.key")
 	if err != nil {
 		t.Error("Error when loading cert and key pair", err)
 	}
 
-	clientCaCert, err := os.ReadFile("../testcerts/rootCACert.pem")
+	clientCaCert, err := os.ReadFile("testcerts/rootCACert.pem")
 	if err != nil {
 		t.Error("Failed to read client CA cert:", err)
 	}
@@ -112,12 +112,12 @@ func TestTcpAcceptor_ClientEvictedNoTls(t *testing.T) {
 }
 
 func TestTcpAcceptor_MutualTls(t *testing.T) {
-	cert, err := tls.LoadX509KeyPair("../testcerts/testcert.pem", "../testcerts/testkey.key")
+	cert, err := tls.LoadX509KeyPair("testcerts/testcert.pem", "testcerts/testkey.key")
 	if err != nil {
 		t.Error("Error when loading cert and key pair", err)
 	}
 
-	clientCaCert, err := os.ReadFile("../testcerts/rootCACert.pem")
+	clientCaCert, err := os.ReadFile("testcerts/rootCACert.pem")
 	if err != nil {
 		t.Error("Failed to read client CA cert:", err)
 	}
@@ -153,7 +153,7 @@ func TestTcpAcceptor_MutualTls(t *testing.T) {
 	}
 	defer tcpAcceptor.Stop()
 
-	clientCert, err := tls.LoadX509KeyPair("../testcerts/testcert.pem", "../testcerts/testkey.key")
+	clientCert, err := tls.LoadX509KeyPair("testcerts/testcert.pem", "testcerts/testkey.key")
 	if err != nil {
 		t.Error(err)
 	}

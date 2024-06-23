@@ -1,11 +1,11 @@
-#!/bin/bash
+#! /bin/bash
 
 PACKAGE="github.com/maansthoernvik/locksmith"
 VERSION="$(git describe --tags --always --abbrev=0)"
 COMMIT="$(git rev-parse --short HEAD)"
 BUILT="$(date)"
 
-echo "Building Locksmith..."
+echo "Building $1..."
 echo "Version: $VERSION"
 echo "Commit: $COMMIT"
 echo "Built: $BUILT"
@@ -16,4 +16,5 @@ LDFLAGS=(
   "-X '${PACKAGE}/version.Built=${BUILT}'"
 )
 
-CGO_ENABLED=0 GOOS=linux go build -ldflags="${LDFLAGS[*]}" -o /locksmith
+# set any build flags such as CGO_ENABLED=0 GOOS=linux separately from this script.
+go build -ldflags="${LDFLAGS[*]}" -o $1 $2

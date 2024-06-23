@@ -80,7 +80,7 @@ jobs:
           go-version: '1.21'
 
       - name: Build server binary
-        run: go build -o server-bin exec/server
+        run: ./build-set-version locksmith ./exec/server
 
       - name: Build CLI binary
-        run: go build -o cli-bin exec/cli
+        run: ./build-set-version locksmith-ctl ./exec/cli

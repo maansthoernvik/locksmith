@@ -23,7 +23,7 @@ func main() {
 
 	// Print to bypass loglevel settings and write to stdout
 	fmt.Printf(
-		"starting Locksmith... \n  Version: %s\n   Commit: %s\n    Built: %s\n",
+		"starting Locksmith... \nversion: %s\ncommit: %s\nbuilt: %s\n",
 		version.Version, version.Commit, version.Built,
 	)
 

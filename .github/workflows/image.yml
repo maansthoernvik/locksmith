@@ -6,9 +6,8 @@ env:
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - v*
+  release:
+    types: [created]
 
 jobs:
   docker:

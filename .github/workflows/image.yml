@@ -17,8 +17,6 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - uses: docker/setup-qemu-action@v3
 
       - uses: docker/setup-buildx-action@v3
@@ -34,7 +32,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v5
+      - run: echo "VERSION=$(git describe --tags --always --abbrev=0)" >> $GITHUB_ENV
+      - run: echo "PACKAGE=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - run: echo "VERSION=$VERSION PACKAGE=$PACKAGE"
+
+      - uses: docker/build-push-action@v6
         with:
           push: true
           tags: ${{ steps.meta.outputs.tags }}

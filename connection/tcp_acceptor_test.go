@@ -97,7 +97,7 @@ func TestTcpAcceptor_ClientEvictedNoTls(t *testing.T) {
 
 	c := client.NewClient(&client.ClientOptions{
 		Host: "localhost",
-		Port: 30000,
+		Port: 30001,
 	})
 
 	err = c.Connect()
@@ -159,7 +159,7 @@ func TestTcpAcceptor_MutualTls(t *testing.T) {
 	}
 	c := client.NewClient(&client.ClientOptions{
 		Host: "localhost",
-		Port: 30000,
+		Port: 30002,
 		TlsConfig: &tls.Config{
 			Certificates: []tls.Certificate{clientCert},
 			RootCAs:      pool,

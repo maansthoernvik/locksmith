@@ -26,7 +26,7 @@ func TestTcpAcceptor_AcceptConnections(t *testing.T) {
 			defer conn.Close()
 			wg.Done()
 		},
-		Port: 30000,
+		Port: 30009,
 	})
 	// Use a port that isn't likely in use nor in a range that could be
 	// privileged.
@@ -44,9 +44,9 @@ func TestTcpAcceptor_AcceptConnections(t *testing.T) {
 		}
 	}(wg)
 
-	client_conn, err := net.Dial("tcp", "localhost:30000")
+	client_conn, err := net.Dial("tcp", "localhost:30009")
 	if err != nil {
-		t.Error("Error when dialing localhost:30000")
+		t.Error("Error when dialing localhost:30009")
 	}
 	defer client_conn.Close()
 

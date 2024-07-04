@@ -14,7 +14,7 @@ import (
 )
 
 func Test_ClientLifecycle(t *testing.T) {
-	listener, err := net.Listen("tcp", "localhost:30000")
+	listener, err := net.Listen("tcp", "localhost:30005")
 	if err != nil {
 		t.Fatal("Failed to start listener:", err)
 	}
@@ -44,7 +44,7 @@ func Test_ClientLifecycle(t *testing.T) {
 		}
 	}()
 
-	client := NewClient(&ClientOptions{Host: "localhost", Port: 30000})
+	client := NewClient(&ClientOptions{Host: "localhost", Port: 30005})
 	startErr := client.Connect()
 	if err != nil {
 		t.Fatal("Failed to start client:", startErr)
@@ -57,7 +57,7 @@ func Test_ClientLifecycle(t *testing.T) {
 }
 
 func Test_ClientAcquireRelease(t *testing.T) {
-	listener, err := net.Listen("tcp", "localhost:30000")
+	listener, err := net.Listen("tcp", "localhost:30006")
 	if err != nil {
 		t.Fatal("Failed to start listener:", err)
 	}
@@ -99,7 +99,7 @@ func Test_ClientAcquireRelease(t *testing.T) {
 		}
 	}()
 
-	client := NewClient(&ClientOptions{Host: "localhost", Port: 30000})
+	client := NewClient(&ClientOptions{Host: "localhost", Port: 30006})
 	startErr := client.Connect()
 	if err != nil {
 		t.Fatal("Failed to start client:", startErr)
@@ -117,7 +117,7 @@ func Test_ClientAcquireRelease(t *testing.T) {
 func Test_ClientOnAcquired(t *testing.T) {
 	EXPECTED_LOCK_TAG := "locktag"
 
-	listener, err := net.Listen("tcp", "localhost:30000")
+	listener, err := net.Listen("tcp", "localhost:30007")
 	if err != nil {
 		t.Fatal("Failed to start listener:", err)
 	}
@@ -163,7 +163,7 @@ func Test_ClientOnAcquired(t *testing.T) {
 		}
 	}()
 
-	client := NewClient(&ClientOptions{Host: "localhost", Port: 30000, OnAcquired: func(lockTag string) {
+	client := NewClient(&ClientOptions{Host: "localhost", Port: 30007, OnAcquired: func(lockTag string) {
 		if lockTag == EXPECTED_LOCK_TAG {
 			t.Log("OnAcquired called")
 			wg.Done()
@@ -201,7 +201,7 @@ func Test_MutualTls(t *testing.T) {
 	}
 
 	t.Log("Creating listener")
-	listener, err := tls.Listen("tcp", "localhost:30000", tlsConfig)
+	listener, err := tls.Listen("tcp", "localhost:30008", tlsConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func Test_MutualTls(t *testing.T) {
 	t.Log("Creating client")
 	c := &clientImpl{
 		host: "localhost",
-		port: 30000,
+		port: 30008,
 		onAcquired: func(lockTag string) {
 			t.Log("Client got acquired signal for lock tag:", lockTag)
 			wg.Done()

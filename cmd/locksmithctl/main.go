@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/maansthoernvik/locksmith/client"
+	"github.com/maansthoernvik/locksmith/pkg/client"
 )
 
 const USAGE = `Starts a session towards a Locksmith instance using the sample Locksmith

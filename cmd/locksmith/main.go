@@ -22,10 +22,13 @@ func main() {
 	log.SetLogLevel(log.Translate(logLevel))
 
 	// Print to bypass loglevel settings and write to stdout
-	fmt.Printf(
-		"starting Locksmith... \nversion: %s\ncommit: %s\nbuilt: %s\n",
-		version.Version, version.Commit, version.Built,
-	)
+	// Check if '?' since the version info can only be set for container builds, not via 'go install'
+	if version.Version != "?" {
+		fmt.Printf(
+			"starting Locksmith... \nversion: %s\ncommit: %s\nbuilt: %s\n",
+			version.Version, version.Commit, version.Built,
+		)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 

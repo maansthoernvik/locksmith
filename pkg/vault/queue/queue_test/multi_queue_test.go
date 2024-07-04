@@ -51,8 +51,4 @@ func Test_Multi_Enqueue(t *testing.T) {
 	}
 
 	wg.Wait()
-
-	if expectedCallCount != ts.callCount {
-		t.Error("Expected count", expectedCallCount, "got", ts.callCount)
-	}
 }

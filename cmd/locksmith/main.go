@@ -28,6 +28,8 @@ func main() {
 			"starting Locksmith... \nversion: %s\ncommit: %s\nbuilt: %s\n",
 			version.Version, version.Commit, version.Built,
 		)
+	} else {
+		fmt.Println("starting Locksmith...")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

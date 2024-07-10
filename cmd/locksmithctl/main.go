@@ -3,6 +3,9 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -21,12 +24,22 @@ const COMMANDS = `Session started, the following commands are supported:
 acquire [lock]
 release [lock]`
 
-var host string
-var port uint
+var (
+	ErrExit              = errors.New("exiting")
+	host                 string
+	port                 uint
+	clientCertPath       string
+	clientPrivateKeyPath string
+	caCertPath           string
+	c                    client.Client
+)
 
 func main() {
 	flag.StringVar(&host, "host", "localhost", "Locksmith hostname or IP address.")
 	flag.UintVar(&port, "port", 9000, "Locksmith port number.")
+	flag.StringVar(&clientCertPath, "cert", "", "Absolute path to a PEM encoded certificate.")
+	flag.StringVar(&clientPrivateKeyPath, "private-key", "", "Absolute path to a PEM encoded private key.")
+	flag.StringVar(&caCertPath, "ca-cert", "", "Absolute path to a PEM encoded CA certificate which signed the server certificate.")
 
 	flag.Usage = func() {
 		fmt.Println(USAGE)
@@ -35,19 +48,24 @@ func main() {
 	}
 
 	flag.Parse()
+	if err := run(); err != nil && !errors.Is(err, ErrExit) {
+		fmt.Printf("ran into an error: %v", err)
+		os.Exit(1)
+	}
+}
 
+func run() error {
 	fmt.Println("Starting Locksmith shell...")
 	acquiredChan := make(chan interface{}, 1)
-	c, err := getClient(acquiredChan)
+	err := initClient(acquiredChan)
 	if err != nil {
-		fmt.Println("Error creating client:", err)
-		return
+		return err
 	}
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigChan
-		fmt.Println("Exiting")
 		c.Close()
 		fmt.Println("CLOSED:", fmt.Sprintf("%s:%d", host, port))
 		os.Exit(0)
@@ -62,69 +80,95 @@ func main() {
 		fmt.Print("> ")
 		text, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Println("Encountered error:", err)
-			sigChan <- syscall.SIGINT
-			return
+			return err
 		}
 
 		cleanedText := strings.Split(text[:len(text)-1], " ")
-		switch cleanedText[0] {
-		case "exit":
-			sigChan <- syscall.SIGINT
-		case "acquire":
-			if len(cleanedText) != 2 {
-				fmt.Println("> expected 'acquire' followed by a lock")
-				sigChan <- syscall.SIGINT
-				return
-			}
-			lock := cleanedText[1]
-			err := c.Acquire(lock)
-			if err != nil {
-				fmt.Println("Encountered error:", err)
-				sigChan <- syscall.SIGINT
-				return
-			}
-			select {
-			case <-time.After(2 * time.Second):
-				fmt.Println("Timed out waiting for acquired signal")
-				sigChan <- syscall.SIGINT
-				return
-			case <-acquiredChan:
-				//noop
-			}
-		case "release":
-			if len(cleanedText) != 2 {
-				fmt.Println("> expected 'release' followed by a lock")
-				sigChan <- syscall.SIGINT
-				return
-			}
-			lock := cleanedText[1]
-			err := c.Release(lock)
-			if err != nil {
-				fmt.Println("Encountered error:", err)
-				sigChan <- syscall.SIGINT
-				return
-			}
-		default:
-			if cleanedText[0] != "" {
-				fmt.Println("Did not recognize command:", cleanedText[0])
-			}
+
+		err = handleCommand(cleanedText, acquiredChan)
+		if err != nil {
+			return err
 		}
 	}
 }
 
-func getClient(acquiredChan chan interface{}) (client.Client, error) {
-	c := client.NewClient(&client.ClientOptions{
-		Host: host,
-		Port: uint16(port),
+func handleCommand(
+	cmd []string,
+	acquiredChan chan interface{},
+) error {
+	switch cmd[0] {
+	case "exit":
+		return ErrExit
+
+	case "acquire":
+		if len(cmd) != 2 {
+			return errors.New("expected 'acquire' followed by a lock")
+		}
+		lock := cmd[1]
+		err := c.Acquire(lock)
+		if err != nil {
+			return err
+		}
+		select {
+		case <-time.After(2 * time.Second):
+			return errors.New("timeout")
+		case <-acquiredChan:
+			//noop
+		}
+
+	case "release":
+		if len(cmd) != 2 {
+			return errors.New("expected 'release' followed by a lock")
+		}
+		lock := cmd[1]
+		err := c.Release(lock)
+		if err != nil {
+			return err
+		}
+
+	default:
+		if cmd[0] != "" {
+			fmt.Println("did not recognize command:", cmd[0])
+		}
+	}
+
+	return nil
+}
+
+func initClient(acquiredChan chan interface{}) error {
+	var tlsConfig *tls.Config
+	if (clientCertPath != "" && clientPrivateKeyPath != "") || caCertPath != "" {
+		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS13}
+
+		if clientCertPath != "" && clientPrivateKeyPath != "" {
+			clientCert, err := tls.LoadX509KeyPair(clientCertPath, clientPrivateKeyPath)
+			if err != nil {
+				return err
+			}
+			tlsConfig.Certificates = []tls.Certificate{clientCert}
+		}
+
+		if caCertPath != "" {
+			caCert, err := os.ReadFile(caCertPath)
+			if err != nil {
+				return err
+			}
+			pool := x509.NewCertPool()
+			pool.AppendCertsFromPEM(caCert)
+
+			tlsConfig.RootCAs = pool
+		}
+	}
+
+	c = client.NewClient(&client.ClientOptions{
+		Host:      host,
+		Port:      uint16(port),
+		TlsConfig: tlsConfig,
 		OnAcquired: func(lock string) {
 			fmt.Println("acquired ", lock)
 			acquiredChan <- nil
 		},
 	})
-	if err := c.Connect(); err != nil {
-		return nil, err
-	}
 
-	return c, nil
+	return c.Connect()
 }

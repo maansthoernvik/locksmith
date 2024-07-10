@@ -57,7 +57,7 @@ Both the binary and the docker container have configuration options that are con
 
 - `LOCKSMITH_LOG_LEVEL`: If set, the given value MUST be either `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL` (default: `WARNING`)
 - `LOCKSMITH_PORT`: The port where the locksmith server is reachable (default: `9000`)
-- `LOCKSMITH_TLS`: If set to `true`, TLS is enabled for the locksmith server (default: `false`). When enabled, both `LOCKSMITH_TLS_CERT_PATH` and `LOCKSMITH_TLS_KEY_PATH` must be provided or locksmith will panic and stop on start
+- `LOCKSMITH_TLS`: If set to `true`, TLS is enabled for the locksmith server (default: `false`). When enabled, both `LOCKSMITH_TLS_CERT_PATH` and `LOCKSMITH_TLS_KEY_PATH` must be provided or locksmith will panic
 - `LOCKSMITH_TLS_CERT_PATH`: Absolute path to the server´s certificate
 - `LOCKSMITH_TLS_KEY_PATH`: Absolute path to the server´s private key
 - `LOCKSMITH_TLS_REQUIRE_CLIENT_CERT`: When set to `true` (default: `false`), client connections will have their certificates validated against the client CA certificate. You must provide `LOCKSMITH_TLS_CLIENT_CA_CERT_PATH` when this variable is set

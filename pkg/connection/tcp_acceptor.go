@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/maansthoernvik/locksmith/pkg/log"
+	"github.com/rs/zerolog/log"
 )
 
 type TCPAcceptor interface {
@@ -43,10 +43,10 @@ func NewTCPAcceptor(options *TCPAcceptorOptions) TCPAcceptor {
 func (tcpAcceptor *tcpAcceptorImpl) Start() (err error) {
 	if tcpAcceptor.tlsConfig == nil {
 		tcpAcceptor.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", tcpAcceptor.port))
-		log.Info("Starting listener on port ", tcpAcceptor.port)
+		log.Info().Uint16("port", tcpAcceptor.port).Msg("starting listener")
 	} else {
 		tcpAcceptor.listener, err = tls.Listen("tcp", fmt.Sprintf(":%d", tcpAcceptor.port), tcpAcceptor.tlsConfig)
-		log.Info("Starting TLS listener on port ", tcpAcceptor.port)
+		log.Info().Uint16("port", tcpAcceptor.port).Msg("starting TLS listener on port")
 	}
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func (tcpAcceptor *tcpAcceptorImpl) Start() (err error) {
 
 // Stop the TCP acceptor gracefully.
 func (tcpAcceptor *tcpAcceptorImpl) Stop() {
-	log.Info("Stopping TCP acceptor")
+	log.Info().Msg("stopping TCP acceptor")
 	close(tcpAcceptor.stop)
 	tcpAcceptor.listener.Close()
 }
@@ -73,13 +73,15 @@ func (tcpAcceptor *tcpAcceptorImpl) startListener() {
 		if err != nil {
 			select {
 			case <-tcpAcceptor.stop:
-				log.Info("Stopping accept loop gracefully")
+				log.Info().Msg("stopping accept loop gracefully")
 			default:
-				log.Error(err)
+				log.Error().Err(err).Msg("a non stop related error occurred")
 			}
 			break
 		}
-		log.Debug("Listener accepted connection: ", conn.RemoteAddr().String())
+		log.Debug().
+			Str("address", conn.RemoteAddr().String()).
+			Msg("listener accepted connection")
 
 		go func() {
 			defer conn.Close()

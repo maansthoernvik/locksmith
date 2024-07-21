@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maansthoernvik/locksmith/pkg/log"
 	"github.com/maansthoernvik/locksmith/pkg/vault/queue"
 )
 
@@ -37,7 +36,6 @@ func Test_MultiQueueTimeTaken(t *testing.T) {
 }
 
 func Test_Multi_Enqueue(t *testing.T) {
-	log.SetLogLevel(log.WARNING)
 	expectedCallCount := 100
 	ts := &testSynchronized{}
 	q := queue.NewMultiQueue(10, 300, ts)

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/maansthoernvik/locksmith/pkg/log"
 	"github.com/maansthoernvik/locksmith/pkg/vault/queue"
+	"github.com/rs/zerolog/log"
 )
 
 var ErrBadManners = errors.New(
@@ -134,7 +134,10 @@ func (vault *vaultImpl) Acquire(
 	client string,
 	callback func(error) error,
 ) {
-	log.Info("client ", client, " acquiring ", lockTag)
+	log.Info().
+		Str("client", client).
+		Str("tag", lockTag).
+		Msg("acquiring")
 	vault.queueLayer.Enqueue(
 		lockTag, vault.acquireAction(client, callback),
 	)
@@ -185,7 +188,10 @@ func (vault *vaultImpl) Release(
 	client string,
 	callback func(error) error,
 ) {
-	log.Info("client ", client, " releasing ", lockTag)
+	log.Info().
+		Str("client", client).
+		Str("tag", lockTag).
+		Msg("releasing")
 	vault.queueLayer.Enqueue(lockTag, vault.releaseAction(client, callback))
 }
 
@@ -221,7 +227,7 @@ func (vault *vaultImpl) releaseAction(
 
 // Cleans up all information associated with a given client.
 func (vault *vaultImpl) Cleanup(client string) {
-	log.Info("cleaning up after client: ", client)
+	log.Info().Str("client", client).Msg("cleaning up after client")
 	lockTags := vault.clientLookUpTable[client]
 
 	for _, lockTag := range lockTags {
@@ -251,9 +257,9 @@ func (vault *vaultImpl) Synchronized(
 	lockTag string,
 	action queue.SynchronizedAction,
 ) {
-	log.Debug("entering synchronized access block for lock tag ", lockTag)
+	log.Debug().Str("tag", lockTag).Msg("entering synchronized access block for lock tag")
 	action(lockTag)
-	log.Debug("resulting vault state: \n", vault.state)
+	log.Debug().Interface("state", vault.state).Msg("resulting vault state")
 }
 
 func (vault *vaultImpl) fetch(lockTag string) *lock {
@@ -270,23 +276,22 @@ func (vault *vaultImpl) fetch(lockTag string) *lock {
 // Waitlist the input action, related to the given lock tag. Appends the action
 // to the back of the waitlist of the lock tag.
 func (vault *vaultImpl) waitlist(lockTag string, callback func(string)) {
-	log.Debug("Waitlisting client for lock tag: ", lockTag)
+	log.Debug().Str("tag", lockTag).Msg("waitlisting client")
 	_, ok := vault.waitList[lockTag]
 	if !ok {
 		vault.waitList[lockTag] = []*func(string){&callback}
 	} else {
 		vault.waitList[lockTag] = append(vault.waitList[lockTag], &callback)
 	}
-	log.Debug("Resulting waitlist state:\n", vault.waitList)
+	log.Debug().Interface("waitlist", vault.waitList).Send()
 }
 
 // IMPORTANT: only call from synchronized Go-routines.
 // Pop from the waitlist belonging to the input lock tag, results in a waitlisted
 // action being called directly.
 func (vault *vaultImpl) popWaitlist(lockTag string) {
-	log.Debug("Popping from waitlist: ", lockTag)
+	log.Debug().Str("tag", lockTag).Msg("popping from waitlist")
 	if wl, ok := vault.waitList[lockTag]; ok && len(wl) > 0 {
-		log.Debug("Found waitlist for ", lockTag)
 		first := wl[0]
 
 		if len(wl) == 1 {
@@ -294,12 +299,12 @@ func (vault *vaultImpl) popWaitlist(lockTag string) {
 		} else {
 			vault.waitList[lockTag] = wl[1:]
 		}
-		log.Debug("Resulting waitlist state:\n", vault.waitList)
+		log.Debug().Interface("waitlist", vault.waitList).Send()
 
 		f := *first
 		f(lockTag)
 	} else {
-		log.Info("No waitlisted clients for lock tag: ", lockTag)
+		log.Debug().Msg("no waitlisted clients found")
 	}
 }
 

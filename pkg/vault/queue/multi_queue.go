@@ -3,7 +3,7 @@ package queue
 import (
 	"math"
 
-	"github.com/maansthoernvik/locksmith/pkg/log"
+	"github.com/rs/zerolog/log"
 )
 
 // An implementation of the QueueLayer interface utilizaing multiple channels
@@ -46,7 +46,7 @@ func NewMultiQueue(
 		ql.queues[i] = make(chan *queueItem, capacity)
 
 		go func(i int, queue chan *queueItem) {
-			log.Info("Starting multi queue #", i)
+			log.Info().Int("number", i).Msg("starting multi queue go routine")
 			for {
 				qi := <-queue
 				ql.synchronized.Synchronized(qi.lockTag, qi.callback)
@@ -61,10 +61,13 @@ func NewMultiQueue(
 // has gotten a hold of a synchronization Go-routine specific to the resulting hash of
 // the lock tag.
 func (multiQueue *multiQueue) Enqueue(lockTag string, callback func(string)) {
-	log.Debug("Queueing up lock tag: ", lockTag)
+	log.Debug().Str("tag", lockTag).Msg("generating hash and fetching queue index")
 	hash := multiQueue.hashFunc(lockTag)
 	queueIndex := multiQueue.queueIndexFromHash(hash)
-	log.Debug("Got hash ", hash, " enqueueing with queue #", queueIndex)
+	log.Debug().
+		Uint16("hash", hash).
+		Int("queue-index", int(queueIndex)).
+		Msg("enqueueing")
 	multiQueue.queues[queueIndex] <- &queueItem{lockTag: lockTag, callback: callback}
 }
 

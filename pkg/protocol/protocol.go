@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/maansthoernvik/locksmith/pkg/log"
+	"github.com/rs/zerolog/log"
 )
 
 // ServerMessageType encompasses all messages: Client -> Locksmith.
@@ -54,12 +54,14 @@ type ClientMessage struct {
 //   - The server message type is not recognized.
 //   - The lock tag is not valid UTF8.
 func DecodeServerMessage(bytes []byte) (*ServerMessage, error) {
-	log.Debug("Decoding:", bytes)
+	log.Debug().
+		Bytes("bytes", bytes).
+		Msg("decoding server message")
 	if len(bytes) < 3 || len(bytes) > 257 {
 		return nil, ErrServerMessageDecode
 	}
-	log.Debug("Lock tag: ", bytes[2:])
-	log.Debug("Supposed lock tag size: ", int(bytes[1]))
+	log.Debug().Str("tag", string(bytes[2:])).Send()
+	log.Debug().Int("tag-size", int(bytes[1])).Send()
 	if len(bytes[2:]) != int(bytes[1]) {
 		return nil, ErrLockTagSize
 	}
@@ -94,12 +96,14 @@ func EncodeServerMessage(serverMessage *ServerMessage) []byte {
 //   - The client message type is not recognized.
 //   - The lock tag is not valid UTF8.
 func DecodeClientMessage(bytes []byte) (*ClientMessage, error) {
-	log.Debug("Decoding: ", bytes)
+	log.Debug().
+		Bytes("bytes", bytes).
+		Msg("decoding client message")
 	if len(bytes) < 3 || len(bytes) > 257 {
 		return nil, ErrClientMessageDecode
 	}
-	log.Debug("Lock tag: ", bytes[2:])
-	log.Debug("Supposed lock tag size: ", int(bytes[1]))
+	log.Debug().Str("tag", string(bytes[2:])).Send()
+	log.Debug().Int("tag-size", int(bytes[1])).Send()
 	if len(bytes[2:]) != int(bytes[1]) {
 		return nil, ErrLockTagSize
 	}
@@ -117,17 +121,26 @@ func DecodeClientMessage(bytes []byte) (*ClientMessage, error) {
 
 // EncodeServerMessage converts a ServerMessage into a slice of bytes to be sent over a wire.
 func EncodeClientMessage(clientMessage *ClientMessage) []byte {
+	log.Debug().Msg("encoding client message")
 	bytes := make([]byte, 2+len(clientMessage.LockTag))
-	log.Debug("Initialized slice with size: ", len(bytes))
+	log.Debug().Int("len", len(bytes)).Msg("made slice")
 	bytes[0] = byte(Acquired)
-	log.Debug("Added Acquired message type: ", bytes)
+	log.Debug().
+		Bytes("bytes", bytes).
+		Msg("added 'Acquired' message type")
 	bytes[1] = byte(len(clientMessage.LockTag))
-	log.Debug("Added lock tag size: ", bytes)
-	log.Debug("Encoding lock tag: ", clientMessage.LockTag)
+	log.Debug().
+		Bytes("bytes", bytes).
+		Msg("added lock tag size")
+	log.Debug().
+		Str("tag", clientMessage.LockTag).
+		Msg("encoding lock tag")
 	for i := 0; i < len(clientMessage.LockTag); i++ {
 		bytes[i+2] = byte(clientMessage.LockTag[i])
 	}
-	log.Debug("Encoded client message:", bytes)
+	log.Debug().
+		Bytes("bytes", bytes).
+		Msg("encoded client message")
 
 	return bytes
 }

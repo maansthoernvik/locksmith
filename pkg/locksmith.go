@@ -8,9 +8,9 @@ import (
 	"net"
 
 	"github.com/maansthoernvik/locksmith/pkg/connection"
-	"github.com/maansthoernvik/locksmith/pkg/log"
 	"github.com/maansthoernvik/locksmith/pkg/protocol"
 	"github.com/maansthoernvik/locksmith/pkg/vault"
+	"github.com/rs/zerolog/log"
 )
 
 // Locksmith is the root level object containing the implementation of the Locksmith server.
@@ -55,13 +55,13 @@ func New(options *LocksmithOptions) *Locksmith {
 func (locksmith *Locksmith) Start(ctx context.Context) error {
 	err := locksmith.tcpAcceptor.Start()
 	if err != nil {
-		log.Error("failed to start TCP acceptor")
+		log.Error().Msg("failed to start TCP acceptor")
 		return err
 	}
-	log.Info("started locksmith")
+	log.Info().Msg("started locksmith")
 
 	<-ctx.Done()
-	log.Info("stopping locksmith")
+	log.Info().Msg("stopping locksmith")
 	locksmith.tcpAcceptor.Stop()
 
 	return err
@@ -73,16 +73,19 @@ func (locksmith *Locksmith) Start(ctx context.Context) error {
 // messages will be attempted to be decoded, if decoding fails the loop is
 // broken and the client connection disconnected.
 func (locksmith *Locksmith) handleConnection(conn net.Conn) {
-	log.Info("connection accepted from: ", conn.RemoteAddr().String())
+	log.Info().
+		Str("address", conn.RemoteAddr().String()).
+		Msg("connection accepted")
 	for {
 		buffer := make([]byte, 257)
 		n, err := conn.Read(buffer)
 		if err != nil {
 			if err == io.EOF {
-				log.Info("connection ", conn.RemoteAddr().String(),
-					" closed by remote (EOF)")
+				log.Info().
+					Str("address", conn.RemoteAddr().String()).
+					Msg("connection closed by remote (EOF)")
 			} else {
-				log.Error("connection read error: ", err)
+				log.Error().Err(err).Msg("connection read error")
 			}
 
 			// Connection error, clean up client data
@@ -90,14 +93,15 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 			break
 		}
 
-		log.Debug("got message (", n, " chars)")
-		log.Debug("buffer contains: ", buffer)
-		log.Debug("interesting part of the buffer: ", buffer[:n])
+		log.Debug().Int("bytes", n).Msg("read from connection")
+		log.Debug().Bytes("buffer", buffer[:n]).Send()
 
 		incomingMessage, err := protocol.DecodeServerMessage(buffer[:n])
 		if err != nil {
-			log.Error("decoding error, closing connection ("+
-				conn.RemoteAddr().String()+"): ", err)
+			log.Error().
+				Err(err).
+				Str("address", conn.RemoteAddr().String()).
+				Msg("decoding error, closing connection")
 			break
 		}
 
@@ -125,7 +129,7 @@ func (locksmith *Locksmith) handleIncomingMessage(
 			locksmith.releaseCallback(conn),
 		)
 	default:
-		log.Error("invalid message type")
+		log.Error().Msg("invalid message type")
 	}
 }
 
@@ -138,18 +142,18 @@ func (locksmith *Locksmith) acquireCallback(
 ) func(error) error {
 	return func(err error) error {
 		if err != nil {
-			log.Error("got error in acquire callback: ", err)
+			log.Error().Err(err).Msg("got error in acquire callback")
 			conn.Close()
 			return nil
 		}
 
-		log.Debug("notifying client of acquisition for lock tag ", lockTag)
+		log.Debug().Str("locktag", lockTag).Msg("notifying client of acquisition")
 		_, writeErr := conn.Write(protocol.EncodeClientMessage(&protocol.ClientMessage{
 			Type:    protocol.Acquired,
 			LockTag: lockTag,
 		}))
 		if writeErr != nil {
-			log.Error("failed to write to client: ", writeErr)
+			log.Error().Err(writeErr).Msg("failed to write to client")
 			return writeErr
 		}
 
@@ -165,7 +169,7 @@ func (locksmith *Locksmith) releaseCallback(
 ) func(error) error {
 	return func(err error) error {
 		if err != nil {
-			log.Error("got error in release callback: ", err)
+			log.Error().Err(err).Msg("got error in release callback")
 			conn.Close()
 		}
 

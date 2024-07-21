@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maansthoernvik/locksmith/pkg/log"
 	"github.com/maansthoernvik/locksmith/pkg/vault/queue"
 )
 
@@ -37,7 +36,6 @@ func Test_SingleQueueTimeTaken(t *testing.T) {
 }
 
 func Test_Single_Enqueue(t *testing.T) {
-	log.SetLogLevel(log.WARNING)
 	expectedCallCount := 100
 	ts := &testSynchronized{}
 	q := queue.NewSingleQueue(300, ts)

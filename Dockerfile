@@ -4,12 +4,12 @@ FROM golang:1.21 AS build
 WORKDIR /
 
 COPY . .
+RUN go mod download
 
 ARG VERSION
 ARG COMMIT
 ENV VERSION=${VERSION}
 ENV COMMIT=${COMMIT}
-RUN echo "Got VERSION=$VERSION and COMMIT=$COMMIT"
 
 RUN CGO_ENABLED=0 GOOS=linux ./build-set-version locksmith ./cmd/locksmith
 

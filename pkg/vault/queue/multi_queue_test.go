@@ -3,8 +3,6 @@ package queue
 import (
 	"sync"
 	"testing"
-
-	"github.com/maansthoernvik/locksmith/pkg/log"
 )
 
 type testSynchronized struct{}
@@ -14,7 +12,6 @@ func (ts *testSynchronized) Synchronized(lockTag string, callback SynchronizedAc
 }
 
 func Test_queueIndexDistribution(t *testing.T) {
-	log.SetLogLevel(log.WARNING)
 	numQueues := 1000
 	mq := &multiQueue{
 		queues:   make([]chan *queueItem, numQueues),
@@ -61,8 +58,6 @@ func Test_queueIndexDistribution(t *testing.T) {
 }
 
 func Test_queueIndexFromHash(t *testing.T) {
-	log.SetLogLevel(log.WARNING)
-
 	mq := &multiQueue{queues: make([]chan *queueItem, 10)}
 
 	qi := mq.queueIndexFromHash(65535)

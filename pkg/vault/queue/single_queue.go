@@ -1,6 +1,6 @@
 package queue
 
-import "github.com/maansthoernvik/locksmith/pkg/log"
+import "github.com/rs/zerolog/log"
 
 type SingleQueue struct {
 	queue        chan *queueItem
@@ -16,7 +16,7 @@ func NewSingleQueue(
 		synchronized: synchronized,
 	}
 	go func() {
-		log.Info("Started single queue")
+		log.Info().Msg("started single queue")
 		for {
 			qi := <-q.queue
 			//log.Debug("Popped queue item")

@@ -7,8 +7,8 @@ import (
 	"io"
 	"net"
 
-	"github.com/maansthoernvik/locksmith/pkg/log"
 	"github.com/maansthoernvik/locksmith/pkg/protocol"
+	"github.com/rs/zerolog/log"
 )
 
 // Client provides a simple interface for a Locksmith client.
@@ -52,17 +52,26 @@ func NewClient(options *ClientOptions) Client {
 // error, even if something is wrong, until the first client write is issues. This is
 // because of how TLS 13 is implemented.
 func (clientImpl *clientImpl) Connect() (err error) {
+	address := fmt.Sprintf("%s:%d", clientImpl.host, clientImpl.port)
 	if clientImpl.tlsConfig != nil {
-		log.Info("Dialing (TLS) ", clientImpl.host+":"+fmt.Sprint(clientImpl.port))
-		clientImpl.conn, err = tls.Dial("tcp", fmt.Sprintf("%s:%d", clientImpl.host, clientImpl.port), clientImpl.tlsConfig)
+		log.Info().
+			Str("address", address).
+			Msg("dialing (TLS) server")
+		clientImpl.conn, err = tls.Dial(
+			"tcp",
+			address,
+			clientImpl.tlsConfig,
+		)
 	} else {
-		log.Info("Dialing ", clientImpl.host+":"+fmt.Sprint(clientImpl.port))
-		clientImpl.conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", clientImpl.host, clientImpl.port))
+		log.Info().
+			Str("address", address).
+			Msg("dialing server")
+		clientImpl.conn, err = net.Dial("tcp", address)
 	}
 	if err != nil {
 		return err
 	}
-	log.Info("Connected to ", clientImpl.conn.RemoteAddr().String())
+	log.Info().Msg("connected")
 
 	go func(conn net.Conn) {
 		defer conn.Close()
@@ -71,14 +80,17 @@ func (clientImpl *clientImpl) Connect() (err error) {
 			n, readErr := conn.Read(buffer)
 			if readErr != nil {
 				if readErr == io.EOF {
-					log.Info("Connection ", conn.RemoteAddr().String(),
-						" closed by remote (EOF)")
+					log.Info().
+						Str("address", conn.RemoteAddr().String()).
+						Msg("connection closed by remote (EOF)")
 				} else {
 					select {
 					case <-clientImpl.stop:
-						log.Info("Stopping client connection gracefully")
+						log.Info().Msg("stopping client connection gracefully")
 					default:
-						log.Error("Connection read error: ", readErr)
+						log.Error().
+							Err(readErr).
+							Msg("connection read error: ")
 					}
 				}
 
@@ -87,7 +99,9 @@ func (clientImpl *clientImpl) Connect() (err error) {
 
 			clientMessage, decodeErr := protocol.DecodeClientMessage(buffer[:n])
 			if decodeErr != nil {
-				log.Error("Failed to decode message: ", decodeErr)
+				log.Error().
+					Err(decodeErr).
+					Msg("failed to decode message")
 				continue
 			}
 
@@ -95,7 +109,9 @@ func (clientImpl *clientImpl) Connect() (err error) {
 			case protocol.Acquired:
 				clientImpl.onAcquired(clientMessage.LockTag)
 			default:
-				log.Error("Client message type not recognized: ", clientMessage.Type)
+				log.Error().
+					Str("type", string(clientMessage.Type)).
+					Msg("Client message type not recognized: ")
 			}
 		}
 	}(clientImpl.conn)

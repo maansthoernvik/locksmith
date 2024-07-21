@@ -4,8 +4,6 @@ import (
 	"errors"
 	"sync"
 	"testing"
-
-	"github.com/maansthoernvik/locksmith/pkg/log"
 )
 
 type testQueueLayer struct {
@@ -214,7 +212,6 @@ func Test_CallbackError(t *testing.T) {
 }
 
 func Test_Cleanup(t *testing.T) {
-	log.SetLogLevel(log.WARNING)
 	v := &vaultImpl{
 		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),

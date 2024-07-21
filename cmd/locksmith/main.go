@@ -4,32 +4,36 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	locksmith "github.com/maansthoernvik/locksmith/pkg"
 	"github.com/maansthoernvik/locksmith/pkg/env"
-	"github.com/maansthoernvik/locksmith/pkg/log"
 	"github.com/maansthoernvik/locksmith/pkg/vault"
 	"github.com/maansthoernvik/locksmith/pkg/version"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
 	// Set global log level
 	logLevel, _ := env.GetOptionalString(env.LOCKSMITH_LOG_LEVEL, env.LOCKSMITH_LOG_LEVEL_DEFAULT)
-	log.SetLogLevel(log.Translate(logLevel))
+	zerolog.SetGlobalLevel(translateToZerologLevel(logLevel))
+	if console, _ := env.GetOptionalBool(env.LOCKSMITH_LOG_OUTPUT_CONSOLE, env.LOCKSMITH_LOG_OUTPUT_CONSOLE_DEFAULT); console {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	}
 
 	// Print to bypass loglevel settings and write to stdout
 	// Check if '?' since the version info can only be set for container builds, not via 'go install'
 	if version.Version != "?" {
-		fmt.Printf(
-			"starting Locksmith... \nversion: %s\ncommit: %s\nbuilt: %s\n",
-			version.Version, version.Commit, version.Built,
-		)
+		log.Info().
+			Str("version", version.Version).
+			Str("commit", version.Commit).
+			Str("built", version.Built).
+			Msg("starting Locksmith")
 	} else {
-		fmt.Println("starting Locksmith...")
+		log.Info().Msg("starting locksmith")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -38,7 +42,7 @@ func main() {
 		signal_ch := make(chan os.Signal, 1)
 		signal.Notify(signal_ch, syscall.SIGINT, syscall.SIGTERM)
 		signal := <-signal_ch
-		log.Info("got signal: ", signal)
+		log.Info().Any("signal", signal).Msg("captured stop signal")
 		cancel()
 	}()
 
@@ -57,11 +61,31 @@ func main() {
 		locksmithOptions.TlsConfig = getTlsConfig()
 	}
 	if err := locksmith.New(locksmithOptions).Start(ctx); err != nil {
-		log.Error("server start error: ", err)
+		log.Error().Err(err).Msg("server start error")
 		os.Exit(1)
 	}
 
-	log.Info("server stopped")
+	log.Info().Msg("server stopped")
+}
+
+func translateToZerologLevel(level string) zerolog.Level {
+	switch level {
+	case "DEBUG":
+		return zerolog.DebugLevel
+	case "INFO":
+		return zerolog.InfoLevel
+	case "WARNING":
+		return zerolog.WarnLevel
+	case "ERROR":
+		return zerolog.ErrorLevel
+	case "FATAL":
+		return zerolog.FatalLevel
+	case "PANIC":
+		return zerolog.PanicLevel
+	}
+
+	log.Warn().Msg("unable to decode log level")
+	return zerolog.NoLevel
 }
 
 // Fetch TLS config to supply the TCP listener.

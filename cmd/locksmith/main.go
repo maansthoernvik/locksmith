@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +13,7 @@ import (
 	"github.com/maansthoernvik/locksmith/pkg/env"
 	"github.com/maansthoernvik/locksmith/pkg/vault"
 	"github.com/maansthoernvik/locksmith/pkg/version"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -38,11 +40,27 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Check if Prometheus metrics are enabled
+	var srv *http.Server
+	if metrics, _ := env.GetOptionalBool(env.LOCKSMITH_METRICS, env.LOCKSMITH_METRICS_DEFAULT); metrics {
+		http.Handle("/metrics", promhttp.Handler())
+		srv = &http.Server{Addr: ":20000"}
+		go func() {
+			log.Info().Str("address", srv.Addr).Msg("starting metrics server")
+			if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+				log.Error().Err(err).Msg("metrics server failure")
+			}
+		}()
+	}
+
 	go func() {
 		signal_ch := make(chan os.Signal, 1)
 		signal.Notify(signal_ch, syscall.SIGINT, syscall.SIGTERM)
 		signal := <-signal_ch
 		log.Info().Any("signal", signal).Msg("captured stop signal")
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Error().Err(err).Msg("error shutting down metrics server")
+		}
 		cancel()
 	}()
 

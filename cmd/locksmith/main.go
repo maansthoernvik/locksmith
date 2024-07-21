@@ -49,6 +49,8 @@ func main() {
 			log.Info().Str("address", srv.Addr).Msg("starting metrics server")
 			if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 				log.Error().Err(err).Msg("metrics server failure")
+			} else {
+				log.Info().Msg("stopped metrics server")
 			}
 		}()
 	}

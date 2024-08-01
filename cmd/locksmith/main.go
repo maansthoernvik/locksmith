@@ -40,14 +40,15 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Check if Prometheus metrics are enabled
-	var srv *http.Server
-	if metrics, _ := env.GetOptionalBool(env.LOCKSMITH_METRICS, env.LOCKSMITH_METRICS_DEFAULT); metrics {
+	// Check if Prometheus metrics are enabled, start the metrics server if so.
+	var metricsServer *http.Server
+	metrics, _ := env.GetOptionalBool(env.LOCKSMITH_METRICS, env.LOCKSMITH_METRICS_DEFAULT)
+	if metrics {
 		http.Handle("/metrics", promhttp.Handler())
-		srv = &http.Server{Addr: ":20000"}
+		metricsServer = &http.Server{Addr: ":20000"}
 		go func() {
-			log.Info().Str("address", srv.Addr).Msg("starting metrics server")
-			if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			log.Info().Str("address", metricsServer.Addr).Msg("starting metrics server")
+			if err := metricsServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Error().Err(err).Msg("metrics server failure")
 			} else {
 				log.Info().Msg("stopped metrics server")
@@ -60,8 +61,10 @@ func main() {
 		signal.Notify(signal_ch, syscall.SIGINT, syscall.SIGTERM)
 		signal := <-signal_ch
 		log.Info().Any("signal", signal).Msg("captured stop signal")
-		if err := srv.Shutdown(ctx); err != nil {
-			log.Error().Err(err).Msg("error shutting down metrics server")
+		if metrics {
+			if err := metricsServer.Shutdown(ctx); err != nil {
+				log.Error().Err(err).Msg("error shutting down metrics server")
+			}
 		}
 		cancel()
 	}()

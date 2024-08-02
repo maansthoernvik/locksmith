@@ -11,6 +11,7 @@
     - [Advanced configuration options](#advanced-configuration-options)
   - [The command line utility](#the-command-line-utility)
 - [How to use the locksmith code as a library](#how-to-use-the-locksmith-code-as-a-library)
+- [Metrics](#metrics)
 
 
 Locksmith provides a simple way to obtain shared locks between applications.
@@ -64,6 +65,7 @@ Both the binary and the docker container have configuration options that are con
 - `LOCKSMITH_TLS_KEY_PATH`: Absolute path to the server´s private key
 - `LOCKSMITH_TLS_REQUIRE_CLIENT_CERT`: When set to `true` (default: `false`), client connections will have their certificates validated against the client CA certificate. You must provide `LOCKSMITH_TLS_CLIENT_CA_CERT_PATH` when this variable is set
 - `LOCKSMITH_TLS_CLIENT_CA_CERT_PATH`: Absolute path to the client CA certificate
+- `LOCKSMITH_METRICS`: set to `true` to enable exposure of Prometheus metrics (default: `false`)
 
 #### Advanced configuration options
 
@@ -142,3 +144,16 @@ func main() {
 ```
 
 Or use the protocol package directly to write your own client. See the `ClientMessage` and `ServerMessage` types and the interface functions used for encoding/decoding.
+
+## Metrics
+
+Locksmith exposes a few simple Prometheus metrics:
+
+ - `locksmith_total_locked_locks`: Gauge showing the number of currently locked locks.
+ - `locksmith_acquires`: Counter showing the total numnber of (successful) acquires since start
+ - `locksmith_releases`: Counter showing the total number of (successful) releases since start
+ - `locksmith_rejections`: Counter vector showing the number of rejections due to client misbehavior. Vector labels are: `bad_manners`, `unnecessary_acquire`, and `unnecessary_release`
+
+In addition to the above, locksmith also exposes all metrics provided by the `promhttp` package, providing insight into Golang performance.
+
+To enable metrics, remember to set the environment variable `LOCKSMITH_METRICS` to `true`.

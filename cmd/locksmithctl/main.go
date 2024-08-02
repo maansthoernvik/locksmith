@@ -12,9 +12,9 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/maansthoernvik/locksmith/pkg/client"
+	"github.com/rs/zerolog"
 )
 
 const USAGE = `Starts a session towards a Locksmith instance using the sample Locksmith
@@ -35,6 +35,9 @@ var (
 )
 
 func main() {
+	// Disables logging globally
+	zerolog.SetGlobalLevel(zerolog.NoLevel)
+
 	flag.StringVar(&host, "host", "localhost", "Locksmith hostname or IP address.")
 	flag.UintVar(&port, "port", 9000, "Locksmith port number.")
 	flag.StringVar(&clientCertPath, "cert", "", "Absolute path to a PEM encoded certificate.")
@@ -56,8 +59,7 @@ func main() {
 
 func run() error {
 	fmt.Println("Starting Locksmith shell...")
-	acquiredChan := make(chan interface{}, 1)
-	err := initClient(acquiredChan)
+	err := initClient()
 	if err != nil {
 		return err
 	}
@@ -85,7 +87,7 @@ func run() error {
 
 		cleanedText := strings.Split(text[:len(text)-1], " ")
 
-		err = handleCommand(cleanedText, acquiredChan)
+		err = handleCommand(cleanedText)
 		if err != nil {
 			return err
 		}
@@ -94,7 +96,6 @@ func run() error {
 
 func handleCommand(
 	cmd []string,
-	acquiredChan chan interface{},
 ) error {
 	switch cmd[0] {
 	case "exit":
@@ -108,12 +109,6 @@ func handleCommand(
 		err := c.Acquire(lock)
 		if err != nil {
 			return err
-		}
-		select {
-		case <-time.After(2 * time.Second):
-			return errors.New("timeout")
-		case <-acquiredChan:
-			//noop
 		}
 
 	case "release":
@@ -135,7 +130,7 @@ func handleCommand(
 	return nil
 }
 
-func initClient(acquiredChan chan interface{}) error {
+func initClient() error {
 	var tlsConfig *tls.Config
 	if (clientCertPath != "" && clientPrivateKeyPath != "") || caCertPath != "" {
 		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS13}
@@ -166,7 +161,6 @@ func initClient(acquiredChan chan interface{}) error {
 		TlsConfig: tlsConfig,
 		OnAcquired: func(lock string) {
 			fmt.Println("acquired ", lock)
-			acquiredChan <- nil
 		},
 	})
 

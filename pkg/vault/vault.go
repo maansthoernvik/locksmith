@@ -25,19 +25,19 @@ var (
 
 var (
 	locksGauge = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "total_locked_locks",
+		Name: "locksmith_total_locked_locks",
 		Help: "The total number of locked locks",
 	})
 	acquireCounter = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "acquires",
+		Name: "locksmith_acquires",
 		Help: "The number of processed acquires",
 	})
 	releaseCounter = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "releases",
+		Name: "locksmith_releases",
 		Help: "The number of processed releases",
 	})
 	rejectionCounter = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "rejections",
+		Name: "locksmith_rejections",
 		Help: "The number of rejections due to bad manners and unnecessary releases/acquires",
 	}, []string{"reason"})
 )
@@ -298,7 +298,6 @@ func (vault *vaultImpl) Synchronized(
 ) {
 	log.Debug().Str("tag", lockTag).Msg("entering synchronized access block for lock tag")
 	action(lockTag)
-	log.Debug().Interface("state", vault.state).Msg("resulting vault state")
 }
 
 func (vault *vaultImpl) fetch(lockTag string) *lock {
@@ -322,7 +321,7 @@ func (vault *vaultImpl) waitlist(lockTag string, callback func(string)) {
 	} else {
 		vault.waitList[lockTag] = append(vault.waitList[lockTag], &callback)
 	}
-	log.Debug().Interface("waitlist", vault.waitList).Send()
+	log.Debug().Interface("waitlisted", len(vault.waitList[lockTag])).Send()
 }
 
 // IMPORTANT: only call from synchronized Go-routines.

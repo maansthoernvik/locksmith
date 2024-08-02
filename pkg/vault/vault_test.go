@@ -4,13 +4,15 @@ import (
 	"errors"
 	"sync"
 	"testing"
+
+	"github.com/maansthoernvik/locksmith/pkg/vault/queue"
 )
 
 type testQueueLayer struct {
 	vault *vaultImpl
 }
 
-func (tql *testQueueLayer) Enqueue(lockTag string, action func(string)) {
+func (tql *testQueueLayer) Enqueue(lockTag string, action queue.SynchronizedAction) {
 	tql.vault.Synchronized(lockTag, action)
 }
 

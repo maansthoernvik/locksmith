@@ -9,7 +9,7 @@ package queue
 // below. One implementor being the vault.
 type QueueLayer interface {
 	// Request a Go-routine for the given lock tag.
-	Enqueue(lockTag string, callback func(lockTag string))
+	Enqueue(lockTag string, action SynchronizedAction)
 }
 
 type SynchronizedAction func(lockTag string)

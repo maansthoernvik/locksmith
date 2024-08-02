@@ -60,7 +60,7 @@ func NewMultiQueue(
 // Enqueue a lock tag, expect a call to the Synchronized implementor once the queue layer
 // has gotten a hold of a synchronization Go-routine specific to the resulting hash of
 // the lock tag.
-func (multiQueue *multiQueue) Enqueue(lockTag string, callback func(string)) {
+func (multiQueue *multiQueue) Enqueue(lockTag string, callback SynchronizedAction) {
 	log.Debug().Str("tag", lockTag).Msg("generating hash and fetching queue index")
 	hash := multiQueue.hashFunc(lockTag)
 	queueIndex := multiQueue.queueIndexFromHash(hash)

@@ -26,7 +26,7 @@ func NewSingleQueue(
 	return q
 }
 
-func (singleQueue *SingleQueue) Enqueue(lockTag string, callback func(string)) {
+func (singleQueue *SingleQueue) Enqueue(lockTag string, callback SynchronizedAction) {
 	//log.Debug("Queueing up for lock tag:", lockTag)
 	singleQueue.queue <- &queueItem{lockTag: lockTag, callback: callback}
 }

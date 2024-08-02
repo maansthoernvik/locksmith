@@ -6,17 +6,40 @@ import (
 	"fmt"
 
 	"github.com/maansthoernvik/locksmith/pkg/vault/queue"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog/log"
 )
 
-var ErrBadManners = errors.New(
-	"client tried to release lock that it did not own",
+var (
+	ErrUnnecessaryAcquire = errors.New(
+		"client tried to acquire a lock that it already had acquired",
+	)
+	ErrUnnecessaryRelease = errors.New(
+		"client tried to release a lock that had not been acquired",
+	)
+	ErrBadManners = errors.New(
+		"client tried to release lock that it did not own",
+	)
 )
-var ErrUnnecessaryRelease = errors.New(
-	"client tried to release a lock that had not been acquired",
-)
-var ErrUnnecessaryAcquire = errors.New(
-	"client tried to acquire a lock that it already had acquired",
+
+var (
+	locksGauge = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "total_locked_locks",
+		Help: "The total number of locked locks",
+	})
+	acquireCounter = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "acquires",
+		Help: "The number of processed acquires",
+	})
+	releaseCounter = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "releases",
+		Help: "The number of processed releases",
+	})
+	rejectionCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "rejections",
+		Help: "The number of rejections due to bad manners and unnecessary releases/acquires",
+	}, []string{"reason"})
 )
 
 // The Vault interface specifies high level functions to implement in order to
@@ -158,6 +181,9 @@ func (vault *vaultImpl) acquireAction(
 		// release the lock, pop waitlisted client.
 		if lock.isOwner(client) {
 			lock.unlock()
+			locksGauge.Dec()
+			rejectionCounter.With(prometheus.Labels{"reason": "unnecessary_acquire"}).Inc()
+
 			_ = callback(ErrUnnecessaryAcquire)
 
 			vault.popWaitlist(lockTag)
@@ -175,6 +201,9 @@ func (vault *vaultImpl) acquireAction(
 				vault.popWaitlist(lockTag)
 			} else {
 				lock.lock(client)
+				locksGauge.Inc()
+				acquireCounter.Inc()
+
 				vault.appendClientLookupTable(client, lockTag)
 			}
 		}
@@ -207,15 +236,22 @@ func (vault *vaultImpl) releaseAction(
 		currentState := vault.fetch(lockTag)
 		// if already unlocked, kill the client for not following the protocol
 		if !currentState.isLocked() {
+			rejectionCounter.With(prometheus.Labels{"reason": "unnecessary_release"}).Inc()
+
 			_ = callback(ErrUnnecessaryRelease)
 			// else, the lock is in LOCKED state, so check the owner, if
 			// client isn't the owner, it's misbehaving and needs to be killed
 		} else if !currentState.isOwner(client) {
+			rejectionCounter.With(prometheus.Labels{"reason": "bad_manners"}).Inc()
+
 			_ = callback(ErrBadManners)
 			// else, client is the owner of the lock, release it and call
 			// callback
 		} else {
 			currentState.unlock()
+			locksGauge.Dec()
+			releaseCounter.Inc()
+
 			_ = callback(nil) // We don't care about release errors
 
 			vault.cleanClientLookupTable(client, lockTag)
@@ -246,6 +282,9 @@ func (vault *vaultImpl) cleanupAction(client string) queue.SynchronizedAction {
 	return func(lockTag string) {
 		if currentState := vault.fetch(lockTag); currentState.isOwner(client) {
 			currentState.unlock()
+			locksGauge.Dec()
+			releaseCounter.Inc()
+
 			vault.popWaitlist(lockTag)
 		}
 	}

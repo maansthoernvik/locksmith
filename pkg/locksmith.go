@@ -51,7 +51,8 @@ func New(options *LocksmithOptions) *Locksmith {
 	return locksmith
 }
 
-// Blocking call! Starts the Locksmith instance. Call Stop() to stop the instance.
+// Starts the Locksmith instance. This is a blocking call that can be unblocked
+// by cancelling the provided context.
 func (locksmith *Locksmith) Start(ctx context.Context) error {
 	err := locksmith.tcpAcceptor.Start()
 	if err != nil {
@@ -76,6 +77,10 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 	log.Info().
 		Str("address", conn.RemoteAddr().String()).
 		Msg("connection accepted")
+
+	// On connection close, clean up client data
+	defer locksmith.vault.Cleanup(conn.RemoteAddr().String())
+
 	for {
 		buffer := make([]byte, 257)
 		n, err := conn.Read(buffer)
@@ -85,11 +90,9 @@ func (locksmith *Locksmith) handleConnection(conn net.Conn) {
 					Str("address", conn.RemoteAddr().String()).
 					Msg("connection closed by remote (EOF)")
 			} else {
-				log.Error().Err(err).Msg("connection read error")
+				log.Error().Err(err).Msg("connection read error, closing connection")
 			}
 
-			// Connection error, clean up client data
-			locksmith.vault.Cleanup(conn.RemoteAddr().String())
 			break
 		}
 

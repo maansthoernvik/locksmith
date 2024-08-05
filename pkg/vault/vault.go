@@ -137,12 +137,10 @@ func NewVault(options *VaultOptions) Vault {
 		clientLookUpTable: make(map[string][]string),
 	}
 	if options.QueueType == Single {
-		vault.queueLayer = queue.NewSingleQueue(
-			options.QueueCapacity, vault,
-		)
+		vault.queueLayer = queue.NewSingleQueue(options.QueueCapacity)
 	} else {
 		vault.queueLayer = queue.NewMultiQueue(
-			options.QueueConcurrency, options.QueueCapacity, vault,
+			options.QueueConcurrency, options.QueueCapacity,
 		)
 	}
 
@@ -174,7 +172,7 @@ func (vault *vaultImpl) Acquire(
 func (vault *vaultImpl) acquireAction(
 	client string,
 	callback func(error) error,
-) queue.SynchronizedAction {
+) func(string) {
 	return func(lockTag string) {
 		lock := vault.fetch(lockTag)
 		// a second acquire is a protocol offense, callback with error and
@@ -231,7 +229,7 @@ func (vault *vaultImpl) Release(
 func (vault *vaultImpl) releaseAction(
 	client string,
 	callback func(error) error,
-) queue.SynchronizedAction {
+) func(string) {
 	return func(lockTag string) {
 		currentState := vault.fetch(lockTag)
 		// if already unlocked, kill the client for not following the protocol
@@ -278,7 +276,7 @@ func (vault *vaultImpl) Cleanup(client string) {
 // This function must only be called from the scope of a synchronization
 // Go-routine, because just like the acquire- and releaseAction functions, it
 // handles the vault's lock states.
-func (vault *vaultImpl) cleanupAction(client string) queue.SynchronizedAction {
+func (vault *vaultImpl) cleanupAction(client string) func(string) {
 	return func(lockTag string) {
 		if currentState := vault.fetch(lockTag); currentState.isOwner(client) {
 			currentState.unlock()
@@ -288,16 +286,6 @@ func (vault *vaultImpl) cleanupAction(client string) queue.SynchronizedAction {
 			vault.popWaitlist(lockTag)
 		}
 	}
-}
-
-// This member function is the only function allowed to touch the vault's lock
-// states. It is called from the queue layer after a dispatch via Enqueue().
-func (vault *vaultImpl) Synchronized(
-	lockTag string,
-	action queue.SynchronizedAction,
-) {
-	log.Debug().Str("tag", lockTag).Msg("entering synchronized access block for lock tag")
-	action(lockTag)
 }
 
 func (vault *vaultImpl) fetch(lockTag string) *lock {

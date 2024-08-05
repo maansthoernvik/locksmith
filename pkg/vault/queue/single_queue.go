@@ -3,30 +3,23 @@ package queue
 import "github.com/rs/zerolog/log"
 
 type SingleQueue struct {
-	queue        chan *queueItem
-	synchronized Synchronized
+	queue chan *queueItem
 }
 
 func NewSingleQueue(
 	size int,
-	synchronized Synchronized,
 ) QueueLayer {
-	q := &SingleQueue{
-		queue:        make(chan *queueItem, size),
-		synchronized: synchronized,
-	}
+	q := &SingleQueue{queue: make(chan *queueItem, size)}
 	go func() {
 		log.Info().Msg("started single queue")
 		for {
 			qi := <-q.queue
-			//log.Debug("Popped queue item")
-			q.synchronized.Synchronized(qi.lockTag, qi.callback)
+			qi.action(qi.lockTag)
 		}
 	}()
 	return q
 }
 
-func (singleQueue *SingleQueue) Enqueue(lockTag string, callback SynchronizedAction) {
-	//log.Debug("Queueing up for lock tag:", lockTag)
-	singleQueue.queue <- &queueItem{lockTag: lockTag, callback: callback}
+func (singleQueue *SingleQueue) Enqueue(lockTag string, action func(string)) {
+	singleQueue.queue <- &queueItem{lockTag: lockTag, action: action}
 }

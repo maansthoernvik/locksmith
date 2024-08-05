@@ -22,9 +22,8 @@ import (
 // This method ensures the same index channel always handles the same hash(es),
 // and eliminates race conditions between clients of Locksmith.
 type multiQueue struct {
-	queues       []chan *queueItem
-	hashFunc     func(string) uint16
-	synchronized Synchronized
+	queues   []chan *queueItem
+	hashFunc func(string) uint16
 }
 
 // Creates a QueueLayer with multiple underlying go routines for quicker
@@ -33,12 +32,10 @@ type multiQueue struct {
 func NewMultiQueue(
 	concurrency int,
 	capacity int,
-	synchronized Synchronized,
 ) QueueLayer {
 	ql := &multiQueue{
-		queues:       make([]chan *queueItem, concurrency),
-		hashFunc:     fnv1aHash,
-		synchronized: synchronized,
+		queues:   make([]chan *queueItem, concurrency),
+		hashFunc: fnv1aHash,
 	}
 
 	// Initialize queues, queue[0] is responsible for the range 0 -> 65535 / numQueues and so on
@@ -49,7 +46,7 @@ func NewMultiQueue(
 			log.Info().Int("number", i).Msg("starting multi queue go routine")
 			for {
 				qi := <-queue
-				ql.synchronized.Synchronized(qi.lockTag, qi.callback)
+				qi.action(qi.lockTag)
 			}
 		}(i, ql.queues[i])
 	}
@@ -57,10 +54,10 @@ func NewMultiQueue(
 	return ql
 }
 
-// Enqueue a lock tag, expect a call to the Synchronized implementor once the queue layer
-// has gotten a hold of a synchronization Go-routine specific to the resulting hash of
-// the lock tag.
-func (multiQueue *multiQueue) Enqueue(lockTag string, callback SynchronizedAction) {
+// Enqueue a lock tag, expect a call to the action once the queue layer has gotten
+// a hold of a synchronization Go-routine specific to the resulting hash of the
+// lock tag.
+func (multiQueue *multiQueue) Enqueue(lockTag string, action func(string)) {
 	log.Debug().Str("tag", lockTag).Msg("generating hash and fetching queue index")
 	hash := multiQueue.hashFunc(lockTag)
 	queueIndex := multiQueue.queueIndexFromHash(hash)
@@ -68,7 +65,7 @@ func (multiQueue *multiQueue) Enqueue(lockTag string, callback SynchronizedActio
 		Uint16("hash", hash).
 		Int("queue-index", int(queueIndex)).
 		Msg("enqueueing")
-	multiQueue.queues[queueIndex] <- &queueItem{lockTag: lockTag, callback: callback}
+	multiQueue.queues[queueIndex] <- &queueItem{lockTag: lockTag, action: action}
 }
 
 // Get a queue index from an input hash to select which queue should handle an

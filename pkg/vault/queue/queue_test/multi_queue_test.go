@@ -13,8 +13,7 @@ import (
 func Test_MultiQueueTimeTaken(t *testing.T) {
 	t.Skip()
 	start := time.Now()
-	ts := &testSynchronized{}
-	mq := queue.NewMultiQueue(10, 100, ts)
+	mq := queue.NewMultiQueue(10, 100)
 	numEnqueues := 10000
 	wg := sync.WaitGroup{}
 	wg.Add(numEnqueues)
@@ -37,8 +36,7 @@ func Test_MultiQueueTimeTaken(t *testing.T) {
 
 func Test_Multi_Enqueue(t *testing.T) {
 	expectedCallCount := 100
-	ts := &testSynchronized{}
-	q := queue.NewMultiQueue(10, 300, ts)
+	q := queue.NewMultiQueue(10, 300)
 	wg := sync.WaitGroup{}
 	wg.Add(expectedCallCount)
 

@@ -5,12 +5,6 @@ import (
 	"testing"
 )
 
-type testSynchronized struct{}
-
-func (ts *testSynchronized) Synchronized(lockTag string, callback SynchronizedAction) {
-	callback(lockTag)
-}
-
 func Test_queueIndexDistribution(t *testing.T) {
 	numQueues := 1000
 	mq := &multiQueue{
@@ -72,7 +66,7 @@ func Test_queueIndexFromHash(t *testing.T) {
 }
 
 func Test_Enqueue(t *testing.T) {
-	mq := NewMultiQueue(5, 10, &testSynchronized{}).(*multiQueue)
+	mq := NewMultiQueue(5, 10).(*multiQueue)
 	calls := 1000
 
 	wg := sync.WaitGroup{}

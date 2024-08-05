@@ -4,39 +4,31 @@ import (
 	"errors"
 	"sync"
 	"testing"
-
-	"github.com/maansthoernvik/locksmith/pkg/vault/queue"
 )
 
-type testQueueLayer struct {
-	vault *vaultImpl
-}
+type tql struct{}
 
-func (tql *testQueueLayer) Enqueue(lockTag string, action queue.SynchronizedAction) {
-	tql.vault.Synchronized(lockTag, action)
-}
-
-func (tql *testQueueLayer) Waitlist(lockTag string, action func(string)) {
-	// noop
-}
-
-func (tql *testQueueLayer) PopWaitlist(lockTag string) {
-	// noop
+func (t *tql) Enqueue(locktag string, action func(string)) {
+	action(locktag)
 }
 
 func Test_Acquire(t *testing.T) {
 	v := &vaultImpl{
 		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
+		queueLayer:        &tql{},
 	}
-	v.queueLayer = &testQueueLayer{vault: v}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
 
 	called := false
 	v.Acquire("lt", "client", func(err error) error {
 		t.Log("Acquire callback called!")
 		called = true
+		wg.Done()
 		return nil
 	})
+	wg.Wait()
 
 	if !called {
 		t.Error("Acquire callback wasn't called")
@@ -51,11 +43,14 @@ func Test_Release(t *testing.T) {
 	v := &vaultImpl{
 		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
+		queueLayer:        &tql{},
 	}
-	v.queueLayer = &testQueueLayer{vault: v}
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 
 	v.Acquire("lt", "client", func(err error) error {
 		t.Log("Acquire callback called!")
+		wg.Done()
 		return nil
 	})
 
@@ -63,6 +58,7 @@ func Test_Release(t *testing.T) {
 	v.Release("lt", "client", func(err error) error {
 		t.Log("Release callback called!")
 		called = true
+		wg.Done()
 		return nil
 	})
 
@@ -80,9 +76,8 @@ func Test_Waitlist(t *testing.T) {
 		state:             make(map[string]*lock),
 		waitList:          make(map[string][]*func(string)),
 		clientLookUpTable: make(map[string][]string),
+		queueLayer:        &tql{},
 	}
-	// Use single queue for waitlist functionality
-	v.queueLayer = &testQueueLayer{vault: v}
 
 	order := make([]string, 0, 3)
 
@@ -129,11 +124,14 @@ func Test_ReleaseBadManners(t *testing.T) {
 	v := &vaultImpl{
 		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
+		queueLayer:        &tql{},
 	}
-	v.queueLayer = &testQueueLayer{vault: v}
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 
 	v.Acquire("lt", "client1", func(err error) error {
 		t.Log("Acquire client1 callback called!")
+		wg.Done()
 		return nil
 	})
 	v.Release("lt", "client2", func(err error) error {
@@ -141,36 +139,47 @@ func Test_ReleaseBadManners(t *testing.T) {
 		if !errors.Is(err, ErrBadManners) {
 			t.Error("Expected BadMannersError")
 		}
+		wg.Done()
 		return nil
 	})
+
+	wg.Wait()
 }
 
 func Test_UnecessaryRelease(t *testing.T) {
 	v := &vaultImpl{
 		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
+		queueLayer:        &tql{},
 	}
-	v.queueLayer = &testQueueLayer{vault: v}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
 
 	v.Release("lt", "client", func(err error) error {
 		t.Log("Release client callback called with error:", err)
 		if !errors.Is(err, ErrUnnecessaryRelease) {
 			t.Error("Expected UnecessaryReleaseError")
 		}
+		wg.Done()
 
 		return nil
 	})
+
+	wg.Wait()
 }
 
 func Test_UnecessaryAcquire(t *testing.T) {
 	v := &vaultImpl{
 		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
+		queueLayer:        &tql{},
 	}
-	v.queueLayer = &testQueueLayer{vault: v}
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 
 	v.Acquire("lt", "client", func(err error) error {
 		t.Log("Acquire client callback called with error:", err)
+		wg.Done()
 		return nil
 	})
 	v.Acquire("lt", "client", func(err error) error {
@@ -178,33 +187,46 @@ func Test_UnecessaryAcquire(t *testing.T) {
 		if !errors.Is(err, ErrUnnecessaryAcquire) {
 			t.Error("Expected UnecesasryAcquireError")
 		}
+		wg.Done()
 
 		return nil
 	})
+
+	wg.Wait()
 }
 
 func Test_CallbackError(t *testing.T) {
 	v := &vaultImpl{
 		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
+		queueLayer:        &tql{},
 	}
-	v.queueLayer = &testQueueLayer{vault: v}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
 
 	v.Acquire("lt", "client", func(err error) error {
 		t.Log("Acquire client callback called with error:", err)
+		wg.Done()
 		// Because of the returned error, another client is able to acquire the lock
 		return errors.New("some kind of error")
 	})
+	wg.Wait()
+
 	if l, ok := v.state["lt"]; ok {
 		if l.owner != "" || l.state != UNLOCKED {
 			t.Error("Unexpected lock state")
 		}
 	}
 
+	wg.Add(1)
+
 	v.Acquire("lt", "client2", func(err error) error {
 		t.Log("Acquire client2 callback called with error:", err)
+		wg.Done()
 		return nil
 	})
+
+	wg.Wait()
 
 	if l, ok := v.state["lt"]; ok {
 		if l.owner != "client2" || l.state != LOCKED {
@@ -217,27 +239,33 @@ func Test_Cleanup(t *testing.T) {
 	v := &vaultImpl{
 		state:             make(map[string]*lock),
 		clientLookUpTable: make(map[string][]string),
+		queueLayer:        &tql{},
 	}
-	v.queueLayer = &testQueueLayer{vault: v}
+	wg := sync.WaitGroup{}
+	wg.Add(3)
 
 	t.Log("Initial lookup table state: ", v.clientLookUpTable)
 
 	v.Acquire("lt", "client", func(err error) error {
 		t.Log("Acquire lt client callback called with error:", err)
+		wg.Done()
 		return nil
 	})
 	t.Log(v.clientLookUpTable)
 
 	v.Acquire("lt2", "client", func(err error) error {
 		t.Log("Acquire lt2 client callback called with error:", err)
+		wg.Done()
 		return nil
 	})
 	t.Log(v.clientLookUpTable)
 
 	v.Acquire("lt3", "client", func(err error) error {
 		t.Log("Acquire lt3 client callback called with error:", err)
+		wg.Done()
 		return nil
 	})
+	wg.Wait()
 	t.Log(v.clientLookUpTable)
 
 	t.Log("Checking who owns 'lt'...")
@@ -256,10 +284,15 @@ func Test_Cleanup(t *testing.T) {
 	}
 	t.Log("Lock states before release: ", v.state)
 
+	wg.Add(1)
+
 	v.Release("lt3", "client", func(err error) error {
 		t.Log("Release lt3 client callback called with error:", err)
+		wg.Done()
 		return nil
 	})
+
+	wg.Wait()
 	t.Log(v.clientLookUpTable)
 
 	lts, ok = v.clientLookUpTable["client"]

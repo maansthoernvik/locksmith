@@ -13,8 +13,7 @@ import (
 func Test_SingleQueueTimeTaken(t *testing.T) {
 	t.Skip()
 	start := time.Now()
-	ts := &testSynchronized{}
-	sq := queue.NewSingleQueue(10000, ts)
+	sq := queue.NewSingleQueue(10000)
 	numEnqueues := 10000
 	wg := sync.WaitGroup{}
 	wg.Add(numEnqueues)
@@ -37,8 +36,7 @@ func Test_SingleQueueTimeTaken(t *testing.T) {
 
 func Test_Single_Enqueue(t *testing.T) {
 	expectedCallCount := 100
-	ts := &testSynchronized{}
-	q := queue.NewSingleQueue(300, ts)
+	q := queue.NewSingleQueue(300)
 	wg := sync.WaitGroup{}
 	wg.Add(expectedCallCount)
 
@@ -49,8 +47,4 @@ func Test_Single_Enqueue(t *testing.T) {
 	}
 
 	wg.Wait()
-
-	if expectedCallCount != ts.callCount {
-		t.Error("Expected count", expectedCallCount, "got", ts.callCount)
-	}
 }
